@@ -15,7 +15,8 @@ import time
 
 from formulas import (congruencial_lineal, uniforme_01, normal_box_muller,
                       uniforme_media_desviacion, exponencial_inversa,
-                      binomial_estandarizada, raiz_cuadrada, redondear, seno)
+                      binomial_estandarizada, raiz_cuadrada, redondear, seno,
+                      potencia_entera)
 
 DISTRIBUCIONES = ("normal", "uniforme", "exponencial", "binomial")
 MODELOS_REGRESION = ("lineal", "cuadratico", "senoidal")
@@ -27,7 +28,7 @@ class GeneradorAleatorio:
 
     A = 1664525
     C = 1013904223
-    M = 2 ** 32
+    M = 4294967296            # 2^32
 
     def __init__(self, semilla=None):
         if semilla is None:
@@ -107,7 +108,7 @@ def generar_xor(generador, n_por_clase, n_entradas, desviacion, distribucion, la
     exactamente la tabla del XOR de la clase. Ningún plano lo separa: hace falta
     una capa oculta (por eso el perceptrón no puede)."""
     esquinas = [[], []]
-    for numero in range(2 ** n_entradas):
+    for numero in range(int(potencia_entera(2.0, n_entradas))):   # 2^n esquinas
         esquina, unos, resto = [], 0, numero
         for _ in range(n_entradas):
             bit = resto % 2

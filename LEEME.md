@@ -42,7 +42,7 @@ Ejecución en Visual Studio Code
 
 Uso de la interfaz
 ------------------
-  Pestaña "Red neuronal" (izquierda):
+  Pestaña "Clasificación" (izquierda):
     - Entradas (1 a 10), clases (2 a 10) y puntos por clase (el mismo número
       en todas las clases).
     - Tipo de datos: nubes (media "x1; x2; ...", desviación y distribución por
@@ -69,6 +69,8 @@ Uso de la interfaz
     - Espacio: 1 entrada -> curva de la red; 2 entradas -> superficie 3D;
       3 entradas -> corte en x3 = media con los puntos corregidos; siempre la
       gráfica "real vs. predicho" y el R² (F26). Errores: E, ECM y R² por época.
+    - Escenarios Lineal, Cuadrática y Senoidal: cargan valores que funcionan
+      (momento clásico α = 0,9 y semilla 2, para repetir el mismo resultado).
     - Predecir y para un punto nuevo "x1; x2; ...".
   Pestaña "Ejemplo de clase": reproduce el XOR de las diapositivas (red 2-3-1,
     tasa 0,3, momento 1) con y sin sesgo.
@@ -84,7 +86,18 @@ Uso de la interfaz
       de cada peso (activar "Registrar el proceso").
     - Resumen y fórmulas.
   Abajo: barra "Época mostrada" y "Animar entrenamiento".
-  Clic derecho sobre un botón, un campo o una pestaña: abre su código en VS Code.
+  Debajo de la tasa, en las dos pestañas, una línea indica el paso por época
+    ≈ tasa × N (y tasa × N / (1 − α) con momento clásico): con el ajuste por
+    época G suma los N patrones, así que al aumentar los puntos hay que bajar
+    la tasa. Se pone en rojo cuando el paso es alto.
+  Si el entrenamiento sale mal (divergencia, exactitud igual al azar, ECM que
+    no baja o R² bajo) aparece un aviso con la causa probable.
+  "Resumen y fórmulas" incluye "Dónde está cada paso en el código": archivo,
+    función y línea de cada fórmula y de cada paso del backpropagation.
+  Clic derecho sobre cualquier botón, campo, lista, casilla o pestaña (también
+    las pestañas Clasificación / Regresión / Ejemplo de clase): abre en VS Code
+    la función que hace ese trabajo, en la línea exacta. En la pestaña Espacio
+    abre la función de la gráfica que se está mostrando (3D, 2D o regresión).
   Los decimales se pueden escribir con coma o con punto.
 
 Qué se envía

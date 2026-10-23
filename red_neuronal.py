@@ -301,7 +301,9 @@ class RedNeuronal:
                     "\n  -> Error de la época (pesos antes del ajuste): E = ½Σe² = %s   "
                     "ECM = %s   %s" % (num(E), num(ecm), self.texto_metrica(exa)))
 
-            if not es_finito(E):
+            # Divergencia: el error dejó de ser un número, o creció más de un
+            # millón de veces respecto al de los pesos iniciales.
+            if not es_finito(E) or ecm > 1e6 * (self.historial_ecm[0] + 1e-12):
                 self.divergio = True
                 break
             if ecm <= ecm_objetivo:
@@ -316,7 +318,12 @@ class RedNeuronal:
                 mejor_antes = minimo(h[:-paciencia])
                 mejor_reciente = minimo(h[-paciencia:])
                 if mejor_reciente >= (1.0 - tolerancia) * mejor_antes:
-                    self.estancado = True
+                    # Si el ECM terminó por encima del inicial no se estabilizó:
+                    # se alejó del mínimo (la tasa es demasiado grande).
+                    if h[-1] > h[0]:
+                        self.divergio = True
+                    else:
+                        self.estancado = True
                     break
             if progreso is not None and progreso(epoca, max_epocas, ecm):
                 self.detenido = True
@@ -347,7 +354,7 @@ class RedNeuronal:
         e = self.epocas
         s = "" if e == 1 else "s"
         if self.divergio:
-            return "DIVERGIÓ en la época %d" % e
+            return "DIVERGIÓ en la época %d (el error creció: tasa demasiado grande)" % e
         if self.convergio:
             return "alcanzó el ECM objetivo en %d época%s" % (e, s)
         if self.detenido:

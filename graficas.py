@@ -83,7 +83,9 @@ def _salidas_en_rejilla(res, epoca, ejes):
     """Evalúa la red en todos los puntos de la rejilla (en unidades originales).
     El resultado se guarda en res['cache'] para no repetir el cálculo al
     cambiar de pestaña."""
-    clave = ("rejilla", epoca, len(ejes[0]))
+    # La clave incluye los límites y el tamaño de cada eje: si la rejilla cambia
+    # (por ejemplo, al agregar un punto nuevo lejos de los datos) se recalcula.
+    clave = ("rejilla", epoca, tuple((e[0], e[-1], len(e)) for e in ejes))
     if clave in res["cache"]:
         return res["cache"][clave]
     red, mins, maxs = res["red"], res["mins"], res["maxs"]
@@ -455,7 +457,7 @@ def dibujar_pesos_capas(fig, res, epoca=None):
         if len(nombres) <= 12:
             ax.legend(fontsize=7, ncol=2 if len(nombres) > 6 else 1, loc="best")
         else:
-            ax.text(0.02, 0.02, "%d pesos: los nombres están en la pestaña Red\ny en 'Resumen y fórmulas'"
+            ax.text(0.02, 0.02, "%d pesos: sus nombres y valores están en\n'Resumen y fórmulas' (PESOS FINALES)"
                     % len(nombres), transform=ax.transAxes, fontsize=7, color="#555", va="bottom")
     fig.suptitle("Evolución de los pesos capa por capa (F8 / F9) — línea punteada: sesgo θ", fontsize=11)
 

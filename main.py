@@ -26,7 +26,7 @@ import graficas as gr
 from red_neuronal import RedNeuronal, num
 from aleatorio import DISTRIBUCIONES, MODELOS_REGRESION, centros_automaticos
 from formulas import (media, minimo, maximo, es_finito, ajuste_profesor,
-                      ajuste_momento_clasico, seno)
+                      ajuste_momento_clasico, seno, potencia_entera, suma_ponderada)
 
 AZUL = "#1F3A5F"
 FONDO = "#F4F6FA"
@@ -47,6 +47,17 @@ ESCENARIOS = {
                   "ocultas": "6", "tasa": "0,05", "epocas": "1500"},
     "XOR 3D": {"tipo": "xor", "ocultas": "8", "tasa": "0,1", "epocas": "1500"},
     "Esfera 3D": {"tipo": "esfera", "ocultas": "6", "tasa": "0,1", "epocas": "2000"},
+}
+# Escenarios de regresión: valores que funcionan bien para mostrar en la
+# sustentación. Usan el momento clásico (con la fórmula del profesor y momento 1
+# el descenso por lotes es muy lento) y una semilla fija para poder repetirlos.
+ESCENARIOS_REGRESION = {
+    "Lineal": {"modelo": "lineal", "entradas": 2, "coef": [2.0, -1.5], "centro": [5.0, 5.0],
+               "ruido": 1.0, "ocultas": "4", "tasa": "0,003", "epocas": "3000", "paciencia": "200"},
+    "Cuadrática": {"modelo": "cuadratico", "entradas": 2, "coef": [2.0, -1.5], "centro": [5.0, 5.0],
+                   "ruido": 1.0, "ocultas": "8", "tasa": "0,003", "epocas": "3000", "paciencia": "200"},
+    "Senoidal": {"modelo": "senoidal", "entradas": 1, "coef": [2.0], "centro": [5.0],
+                 "ruido": 0.3, "ocultas": "10", "tasa": "0,005", "epocas": "4000", "paciencia": "500"},
 }
 TEXTO_AJUSTE = {"epoca": "por época (lotes)", "patron": "por patrón"}
 TEXTO_MOMENTO = {"profesor": "del profesor (Peso·Momento)", "clasico": "clásico (α·ΔW anterior)"}
@@ -85,11 +96,26 @@ def leer_int(var, nombre, minimo_valor=None, maximo_valor=None):
         raise ValueError("'%s' debe ser un número entero (se escribió: '%s')." % (nombre, texto))
     if not es_finito(real):
         raise ValueError("'%s' debe ser un número entero finito." % nombre)
+    if real != int(real):
+        raise ValueError("'%s' debe ser un número entero (se escribió: '%s')." % (nombre, texto))
     valor = int(real)
     if minimo_valor is not None and valor < minimo_valor:
         raise ValueError("'%s' debe ser al menos %d." % (nombre, minimo_valor))
     if maximo_valor is not None and valor > maximo_valor:
         raise ValueError("'%s' debe ser como máximo %d." % (nombre, maximo_valor))
+    return valor
+
+
+def leer_momento(var, tipo_momento):
+    """Momento de la fórmula del profesor: Peso(n+1) = Peso(n)*Momento + G*Tasa.
+    Con 1 el peso se conserva y solo cambia por G. Con un valor menor que 1 el
+    peso se encoge en cada época (como un 'olvido'). Con 0 se borraría todo lo
+    aprendido y con un negativo el peso cambiaría de signo en cada época: por
+    eso solo se acepta 0 < Momento <= 1."""
+    valor = leer_float(var, "Momento")
+    if tipo_momento == "profesor" and not (0 < valor <= 1):
+        raise ValueError("El momento de la fórmula del profesor debe estar entre 0 y 1 (0 < Momento <= 1).\n"
+                         "Con 1 el peso conserva su valor; con menos de 1 se encoge en cada época.")
     return valor
 
 
@@ -260,6 +286,7 @@ class Aplicacion:
 
         self.nb_config = ttk.Notebook(izquierda)
         self.nb_config.pack(fill="both", expand=True)
+        self.nb_config.bind("<Button-3>", self._codigo_pestana_config)
         self.botones_entrenar, self.botones_parar = [], []
         self._pestana_red()
         self._pestana_regresion()
@@ -347,9 +374,27 @@ class Aplicacion:
             indice = self.nb_res.index("@%d,%d" % (evento.x, evento.y))
         except tk.TclError:
             return
-        funciones = [gr.dibujar_espacio, gr.dibujar_errores, gr.dibujar_pesos_capas,
-                     gr.dibujar_todos_pesos, gr.dibujar_red, RedNeuronal.entrenar, ex.resumen]
+        espacio = gr.dibujar_espacio
+        if self.res is not None:
+            n = len(self.res["X"][0])
+            if self.res["tipo"] == "regresion":
+                espacio = gr._espacio_regresion
+            elif n == 3:
+                espacio = gr._espacio_3d
+            elif n == 2:
+                espacio = gr._espacio_2d
+        funciones = [espacio, gr.dibujar_errores, gr.dibujar_pesos_capas,
+                     gr.dibujar_todos_pesos, gr.dibujar_red, RedNeuronal._anotar_patron, ex.resumen]
         self._abrir_codigo(funciones[indice])
+
+    def _codigo_pestana_config(self, evento):
+        """Clic derecho sobre una pestaña de la izquierda: abre la función que
+        ejecuta ese tipo de entrenamiento."""
+        try:
+            indice = self.nb_config.index("@%d,%d" % (evento.x, evento.y))
+        except tk.TclError:
+            return
+        self._abrir_codigo([ex.ejecutar, ex.ejecutar_regresion, ex.ejecutar_ejemplo_clase][indice])
 
     # ------------------------------------------------------------------
     # Pestaña RED NEURONAL
@@ -478,8 +523,8 @@ class Aplicacion:
                                          variable=self.v_sesgo),
                          RedNeuronal.__init__).grid(row=9, column=0, sticky="w")
         self.v_x0 = tk.StringVar(value=str(cfg["x0"]))
-        ttk.Combobox(red, textvariable=self.v_x0, values=("-1", "+1"), state="readonly",
-                     width=4).grid(row=9, column=1, sticky="w", padx=4)
+        self._ver_codigo(ttk.Combobox(red, textvariable=self.v_x0, values=("-1", "+1"), state="readonly",
+                                      width=4), suma_ponderada).grid(row=9, column=1, sticky="w", padx=4)
         self.v_normalizar = tk.BooleanVar(value=cfg["normalizar"])
         self._ver_codigo(ttk.Checkbutton(red, text="Normalizar las entradas a [0, 1] (F16)",
                                          variable=self.v_normalizar),
@@ -495,11 +540,17 @@ class Aplicacion:
                                          variable=self.v_registrar),
                          RedNeuronal._anotar_patron).grid(row=13, column=0, sticky="w")
         self.v_epocas_reg = tk.StringVar(value=str(cfg["epocas_registro"]))
-        ttk.Entry(red, textvariable=self.v_epocas_reg, width=5).grid(row=13, column=1, sticky="w", padx=4)
+        self._ver_codigo(ttk.Entry(red, textvariable=self.v_epocas_reg, width=5),
+                         RedNeuronal._anotar_patron).grid(row=13, column=1, sticky="w", padx=4)
         ttk.Label(red, style="Nota.TLabel", justify="left",
                   text="Con el ajuste por época, G suma los N patrones: si la tasa es grande\n"
                        "el error oscila; con muchos puntos conviene una tasa pequeña.").grid(
             row=14, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self.lbl_paso = self._ver_codigo(tk.Label(red, justify="left", anchor="w", wraplength=540,
+                                                  font=("Segoe UI", 9, "bold"), bg=FONDO),
+                                         ex.guia_paso)
+        insertar_fila(red, 3)                 # justo debajo de la tasa de aprendizaje
+        self.lbl_paso.grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
         acciones = ttk.Frame(f)
         acciones.pack(fill="x", pady=10)
@@ -507,8 +558,9 @@ class Aplicacion:
             ttk.Button(acciones, text="▶  ENTRENAR", style="Accion.TButton", command=self.entrenar),
             ex.ejecutar)
         self.btn_entrenar.pack(side="left", fill="x", expand=True)
-        self.btn_parar = ttk.Button(acciones, text="■ Detener", command=self.detener_entrenamiento,
-                                    state="disabled")
+        self.btn_parar = self._ver_codigo(
+            ttk.Button(acciones, text="■ Detener", command=self.detener_entrenamiento, state="disabled"),
+            RedNeuronal.entrenar)
         self.btn_parar.pack(side="left", padx=(6, 0), ipady=6)
         self.botones_entrenar.append(self.btn_entrenar)
         self.botones_parar.append(self.btn_parar)
@@ -517,16 +569,37 @@ class Aplicacion:
         prueba.pack(fill="x", pady=4)
         ttk.Label(prueba, text="x1; x2; ...").pack(side="left")
         self.v_punto = tk.StringVar(value="5; 5; 5")
-        ttk.Entry(prueba, textvariable=self.v_punto, width=22).pack(side="left", padx=6)
+        self._ver_codigo(ttk.Entry(prueba, textvariable=self.v_punto, width=22),
+                         ex.clasificar_punto).pack(side="left", padx=6)
         self._ver_codigo(ttk.Button(prueba, text="Clasificar", command=self.clasificar_punto),
                          ex.clasificar_punto).pack(side="left")
 
         for var in (self.v_ocultas, self.v_nentradas, self.v_nclases, self.v_tipo):
             var.trace_add("write", lambda *a: self._actualizar_arquitectura())
+        for var in (self.v_tasa, self.v_npc, self.v_nclases, self.v_tipo, self.v_ajuste,
+                    self.v_tipo_momento, self.v_alfa):
+            var.trace_add("write", lambda *a: self._actualizar_paso())
         self.v_tipo_momento.trace_add("write", lambda *a: self._activar_momento())
         self._construir_tabla()
         self._cambio_tipo()
         self._activar_momento()
+        self._actualizar_paso()
+
+    def _mostrar_paso(self, etiqueta, texto, nivel):
+        etiqueta.configure(text=texto, fg="#B03A2E" if nivel == "alto" else "#1E7B3A")
+
+    def _actualizar_paso(self):
+        """Muestra la relación tasa × N (ver experimentos.guia_paso)."""
+        try:
+            tasa = float(self.v_tasa.get().replace(",", "."))
+            N = int(self.v_npc.get()) * self._n_clases()
+            alfa = float(self.v_alfa.get().replace(",", "."))
+        except ValueError:
+            self.lbl_paso.configure(text="")
+            return
+        ajuste = "patron" if self.v_ajuste.get() == TEXTO_AJUSTE["patron"] else "epoca"
+        tipo = "clasico" if self.v_tipo_momento.get() == TEXTO_MOMENTO["clasico"] else "profesor"
+        self._mostrar_paso(self.lbl_paso, *ex.guia_paso(tasa, N, ajuste, tipo, alfa))
 
     # --- tabla de clases ---
     def _n_entradas(self):
@@ -630,11 +703,15 @@ class Aplicacion:
             fila["centro"].set(fmt_vector(c))
 
     def _escenario(self, nombre):
+        """Carga un escenario de 3 entradas. Las nubes cargan sus 3 clases; para
+        XOR y esfera la tabla de nubes también se ajusta a 3 entradas, para que
+        al volver a 'Nubes' no queden medias con otro número de coordenadas."""
         e = ESCENARIOS[nombre]
         self.v_tipo.set(e["tipo"])
         self.v_nentradas.set("3")
+        self._cambio_entradas()
         if e["tipo"] == "nubes":
-            k = minimo([3, maximo([2, len(self.filas_clase)])])
+            k = len(e["centros"])
             self.v_nclases.set(str(k))
             self.filas_clase = [{"centro": tk.StringVar(value=fmt_vector(e["centros"][j])),
                                  "desv": tk.StringVar(value=fmt(e["desv"])),
@@ -678,7 +755,7 @@ class Aplicacion:
         n = leer_int(self.v_nentradas, "Entradas", 1, MAX_ENTRADAS)
         cfg["n_entradas"] = n
         cfg["tipo_datos"] = self.v_tipo.get()
-        cfg["n_por_clase"] = leer_int(self.v_npc, "Puntos por clase", 1)
+        cfg["n_por_clase"] = leer_int(self.v_npc, "Puntos por clase", 1, 5000)
         if cfg["tipo_datos"] == "nubes":
             cfg["n_clases"] = len(self.filas_clase)
             cfg["clases"] = []
@@ -692,9 +769,10 @@ class Aplicacion:
             cfg["xor_desviacion"] = leer_positivo(self.v_xor_desv, "Desviación de cada esquina", cero=True)
             cfg["xor_lado"] = leer_positivo(self.v_xor_lado, "Lado del cubo")
             cfg["distribucion_xor"] = self.v_xor_dist.get()
-            if 2 ** n > 2 * cfg["n_por_clase"]:
+            esquinas = int(potencia_entera(2.0, n))                          # 2^n
+            if esquinas > 2 * cfg["n_por_clase"]:
                 raise ValueError("El XOR con %d entradas tiene %d esquinas: use al menos %d puntos por clase."
-                                 % (n, 2 ** n, 2 ** (n - 1)))
+                                 % (n, esquinas, esquinas // 2))
         else:
             cfg["n_clases"] = 2
             cfg["esfera_centro"] = leer_float(self.v_esf_centro, "Centro de la esfera")
@@ -707,11 +785,11 @@ class Aplicacion:
         cfg["tasa"] = leer_positivo(self.v_tasa, "Tasa de aprendizaje")
         cfg["ajuste"] = "patron" if self.v_ajuste.get() == TEXTO_AJUSTE["patron"] else "epoca"
         cfg["tipo_momento"] = "clasico" if self.v_tipo_momento.get() == TEXTO_MOMENTO["clasico"] else "profesor"
-        cfg["momento"] = leer_float(self.v_momento, "Momento")
+        cfg["momento"] = leer_momento(self.v_momento, cfg["tipo_momento"])
         cfg["alfa"] = leer_positivo(self.v_alfa, "α del momento clásico", cero=True)
         if cfg["tipo_momento"] == "clasico" and cfg["alfa"] >= 1:
             raise ValueError("α debe ser menor que 1: con α >= 1 los cambios se acumulan sin control.")
-        cfg["max_epocas"] = leer_int(self.v_epocas, "Número máximo de épocas", 1)
+        cfg["max_epocas"] = leer_int(self.v_epocas, "Número máximo de épocas", 1, 200000)
         cfg["ecm_objetivo"] = leer_positivo(self.v_ecm, "ECM objetivo", cero=True)
         cfg["usar_sesgo"] = self.v_sesgo.get()
         cfg["x0"] = int(self.v_x0.get())
@@ -719,7 +797,7 @@ class Aplicacion:
         cfg["barajar"] = self.v_barajar.get()
         cfg["semilla"] = leer_semilla(self.v_semilla)
         cfg["registrar"] = self.v_registrar.get()
-        cfg["epocas_registro"] = leer_int(self.v_epocas_reg, "Épocas a registrar", 1)
+        cfg["epocas_registro"] = leer_int(self.v_epocas_reg, "Épocas a registrar", 1, 50)
         return cfg
 
     def clasificar_punto(self):
@@ -788,6 +866,13 @@ class Aplicacion:
                                            cfg["distribucion_ruido"], codigo=ex.GeneradorAleatorio.muestra)
         self.r_formula = ttk.Label(datos, style="Nota.TLabel", justify="left")
         self.r_formula.grid(row=9, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        esc = ttk.Frame(datos)
+        esc.grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(esc, text="Escenarios:").pack(side="left")
+        for nombre in ESCENARIOS_REGRESION:
+            self._ver_codigo(ttk.Button(esc, text=nombre, width=11,
+                                        command=lambda n=nombre: self._escenario_regresion(n)),
+                             self._escenario_regresion).pack(side="left", padx=1)
 
         red = ttk.LabelFrame(f, text="Red neuronal y entrenamiento", padding=8)
         red.pack(fill="x", pady=4)
@@ -822,8 +907,8 @@ class Aplicacion:
                                          variable=self.r_sesgo),
                          RedNeuronal.__init__).grid(row=12, column=0, sticky="w")
         self.r_x0 = tk.StringVar(value=str(cfg["x0"]))
-        ttk.Combobox(red, textvariable=self.r_x0, values=("-1", "+1"), state="readonly",
-                     width=4).grid(row=12, column=1, sticky="w", padx=4)
+        self._ver_codigo(ttk.Combobox(red, textvariable=self.r_x0, values=("-1", "+1"), state="readonly",
+                                      width=4), suma_ponderada).grid(row=12, column=1, sticky="w", padx=4)
         self.r_normalizar = tk.BooleanVar(value=cfg["normalizar"])
         self._ver_codigo(ttk.Checkbutton(red, text="Normalizar entradas y salida a [0, 1] (F16)",
                                          variable=self.r_normalizar),
@@ -839,11 +924,17 @@ class Aplicacion:
                                          variable=self.r_registrar),
                          RedNeuronal._anotar_patron).grid(row=16, column=0, sticky="w")
         self.r_epocas_reg = tk.StringVar(value=str(cfg["epocas_registro"]))
-        ttk.Entry(red, textvariable=self.r_epocas_reg, width=5).grid(row=16, column=1, sticky="w", padx=4)
+        self._ver_codigo(ttk.Entry(red, textvariable=self.r_epocas_reg, width=5),
+                         RedNeuronal._anotar_patron).grid(row=16, column=1, sticky="w", padx=4)
         ttk.Label(red, style="Nota.TLabel", justify="left",
                   text="La salida lineal no se satura: use tasas pequeñas (0,001 a 0,005 con el\n"
                        "ajuste por época). Las capas ocultas siguen siendo sigmoides.").grid(
             row=17, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self.r_lbl_paso = self._ver_codigo(tk.Label(red, justify="left", anchor="w", wraplength=540,
+                                                    font=("Segoe UI", 9, "bold"), bg=FONDO),
+                                           ex.guia_paso)
+        insertar_fila(red, 4)                 # justo debajo de la tasa de aprendizaje
+        self.r_lbl_paso.grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
         acciones = ttk.Frame(f)
         acciones.pack(fill="x", pady=10)
@@ -851,8 +942,9 @@ class Aplicacion:
             ttk.Button(acciones, text="▶  ENTRENAR REGRESIÓN", style="Accion.TButton",
                        command=self.entrenar_regresion), ex.ejecutar_regresion)
         boton.pack(side="left", fill="x", expand=True)
-        parar = ttk.Button(acciones, text="■ Detener", command=self.detener_entrenamiento,
-                           state="disabled")
+        parar = self._ver_codigo(
+            ttk.Button(acciones, text="■ Detener", command=self.detener_entrenamiento, state="disabled"),
+            RedNeuronal.entrenar)
         parar.pack(side="left", padx=(6, 0), ipady=6)
         self.botones_entrenar.append(boton)
         self.botones_parar.append(parar)
@@ -861,7 +953,8 @@ class Aplicacion:
         prueba.pack(fill="x", pady=4)
         ttk.Label(prueba, text="x1; x2; ...").pack(side="left")
         self.r_punto = tk.StringVar(value=fmt_vector([5] * ne))
-        ttk.Entry(prueba, textvariable=self.r_punto, width=22).pack(side="left", padx=6)
+        self._ver_codigo(ttk.Entry(prueba, textvariable=self.r_punto, width=22),
+                         ex.prediccion).pack(side="left", padx=6)
         self._ver_codigo(ttk.Button(prueba, text="Predecir", command=self.predecir_punto),
                          ex.prediccion).pack(side="left")
 
@@ -870,9 +963,57 @@ class Aplicacion:
         for var in (self.r_modelo, self.r_coef, self.r_b, self.r_nentradas):
             var.trace_add("write", lambda *a: self._actualizar_formula())
         self.r_tipo_momento.trace_add("write", lambda *a: self._activar_momento_regresion())
+        for var in (self.r_tasa, self.r_n, self.r_ajuste, self.r_tipo_momento, self.r_alfa, self.r_salida):
+            var.trace_add("write", lambda *a: self._actualizar_paso_regresion())
         self._actualizar_arquitectura_regresion()
         self._actualizar_formula()
         self._activar_momento_regresion()
+        self._actualizar_paso_regresion()
+
+    def _actualizar_paso_regresion(self):
+        try:
+            tasa = float(self.r_tasa.get().replace(",", "."))
+            N = int(self.r_n.get())
+            alfa = float(self.r_alfa.get().replace(",", "."))
+        except ValueError:
+            self.r_lbl_paso.configure(text="")
+            return
+        ajuste = "patron" if self.r_ajuste.get() == TEXTO_AJUSTE["patron"] else "epoca"
+        tipo = "clasico" if self.r_tipo_momento.get() == TEXTO_MOMENTO["clasico"] else "profesor"
+        lineal = self.r_salida.get() == TEXTO_SALIDA["lineal"]
+        self._mostrar_paso(self.r_lbl_paso, *ex.guia_paso(tasa, N, ajuste, tipo, alfa, lineal))
+
+    def _escenario_regresion(self, nombre):
+        """Carga un escenario de regresión que funciona bien. Usa el momento
+        clásico (con α = 0,9) porque el descenso por lotes con la fórmula del
+        profesor (momento 1) es muy lento en regresión, y la semilla 2 para que
+        el resultado se pueda repetir igual en la sustentación."""
+        e = ESCENARIOS_REGRESION[nombre]
+        self.r_nentradas.set(str(e["entradas"]))
+        self.r_modelo.set(e["modelo"])
+        self.r_coef.set(fmt_vector(e["coef"]))
+        self.r_centro.set(fmt_vector(e["centro"]))
+        self.r_b.set("3")
+        self.r_desv.set("2")
+        self.r_dist.set("uniforme")
+        self.r_ruido.set(fmt(e["ruido"]))
+        self.r_dist_ruido.set("normal")
+        self.r_n.set("200")
+        self.r_ocultas.set(e["ocultas"])
+        self.r_salida.set(TEXTO_SALIDA["lineal"])
+        self.r_tasa.set(e["tasa"])
+        self.r_ajuste.set(TEXTO_AJUSTE["epoca"])
+        self.r_tipo_momento.set(TEXTO_MOMENTO["clasico"])
+        self.r_alfa.set("0,9")
+        self.r_epocas.set(e["epocas"])
+        self.r_ecm.set("0")
+        self.r_tol.set("0,0001")
+        self.r_pac.set(e["paciencia"])
+        self.r_normalizar.set(True)
+        self.r_semilla.set("2")
+        self.r_punto.set(fmt_vector([5] * e["entradas"]))
+        self.estado.configure(text="Escenario de regresión '%s' cargado (momento clásico, semilla 2): "
+                                   "presione ENTRENAR REGRESIÓN." % nombre)
 
     def _n_entradas_regresion(self):
         try:
@@ -922,7 +1063,7 @@ class Aplicacion:
         cfg = ex.config_regresion()
         n = leer_int(self.r_nentradas, "Entradas", 1, MAX_ENTRADAS)
         cfg["n_entradas"] = n
-        cfg["n"] = leer_int(self.r_n, "Puntos", 2)
+        cfg["n"] = leer_int(self.r_n, "Puntos", 2, 10000)
         cfg["modelo"] = self.r_modelo.get()
         cfg["coeficientes"] = leer_vector(self.r_coef.get(), "Coeficientes a", n)
         cfg["sesgo"] = leer_float(self.r_b, "Término independiente b")
@@ -936,11 +1077,11 @@ class Aplicacion:
         cfg["tasa"] = leer_positivo(self.r_tasa, "Tasa de aprendizaje")
         cfg["ajuste"] = "patron" if self.r_ajuste.get() == TEXTO_AJUSTE["patron"] else "epoca"
         cfg["tipo_momento"] = "clasico" if self.r_tipo_momento.get() == TEXTO_MOMENTO["clasico"] else "profesor"
-        cfg["momento"] = leer_float(self.r_momento, "Momento")
+        cfg["momento"] = leer_momento(self.r_momento, cfg["tipo_momento"])
         cfg["alfa"] = leer_positivo(self.r_alfa, "α del momento clásico", cero=True)
         if cfg["tipo_momento"] == "clasico" and cfg["alfa"] >= 1:
             raise ValueError("α debe ser menor que 1: con α >= 1 los cambios se acumulan sin control.")
-        cfg["max_epocas"] = leer_int(self.r_epocas, "Número máximo de épocas", 1)
+        cfg["max_epocas"] = leer_int(self.r_epocas, "Número máximo de épocas", 1, 200000)
         cfg["ecm_objetivo"] = leer_positivo(self.r_ecm, "ECM objetivo", cero=True)
         if self.r_tol.get().strip() == "":
             cfg["tolerancia"] = None
@@ -953,7 +1094,7 @@ class Aplicacion:
         cfg["barajar"] = self.r_barajar.get()
         cfg["semilla"] = leer_semilla(self.r_semilla)
         cfg["registrar"] = self.r_registrar.get()
-        cfg["epocas_registro"] = leer_int(self.r_epocas_reg, "Épocas a registrar", 1)
+        cfg["epocas_registro"] = leer_int(self.r_epocas_reg, "Épocas a registrar", 1, 50)
         return cfg
 
     def entrenar_regresion(self):
@@ -1045,6 +1186,7 @@ class Aplicacion:
         for x, c in zip(ex.EJEMPLO_X, ex.EJEMPLO_C):
             tabla.insert("", "end", values=(int(x[0]), int(x[1]), c))
         tabla.pack(anchor="w")
+        self._ver_codigo(tabla, ex.ejecutar_ejemplo_clase)
         ttk.Label(f, justify="left", text=(
             "\nPesos iniciales (diapositivas):\n"
             "   x1 → n1, n2, n3:  −0,424   −0,740   −0,961\n"
@@ -1060,10 +1202,12 @@ class Aplicacion:
         opciones = ttk.LabelFrame(f, text="Opciones", padding=8)
         opciones.pack(fill="x", pady=4)
         self.v_ej_sesgo = tk.BooleanVar(value=False)
-        ttk.Radiobutton(opciones, text="Sin sesgo (exactamente como en las diapositivas)",
-                        value=False, variable=self.v_ej_sesgo).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Radiobutton(opciones, text="Con sesgo θ (inicial 0, x0 = −1)",
-                        value=True, variable=self.v_ej_sesgo).grid(row=1, column=0, columnspan=2, sticky="w")
+        self._ver_codigo(ttk.Radiobutton(opciones, text="Sin sesgo (exactamente como en las diapositivas)",
+                                         value=False, variable=self.v_ej_sesgo),
+                         ex.ejecutar_ejemplo_clase).grid(row=0, column=0, columnspan=2, sticky="w")
+        self._ver_codigo(ttk.Radiobutton(opciones, text="Con sesgo θ (inicial 0, x0 = −1)",
+                                         value=True, variable=self.v_ej_sesgo),
+                         ex.ejecutar_ejemplo_clase).grid(row=1, column=0, columnspan=2, sticky="w")
         self.v_ej_epocas, _ = self._campo(opciones, 2, "Número máximo de épocas", "3000",
                                           codigo=ex.ejecutar_ejemplo_clase)
         self.v_ej_ecm, _ = self._campo(opciones, 3, "ECM objetivo", "0,01",
@@ -1097,11 +1241,12 @@ class Aplicacion:
         self._ver_codigo(self.escala, RedNeuronal.pesos_en_epoca)
         self._ver_codigo(ttk.Button(barra, text="▶ Animar entrenamiento", command=self.animar),
                          self._paso_animacion).pack(side="left", padx=3)
-        ttk.Button(barra, text="■ Detener", command=self.detener).pack(side="left", padx=3)
+        self._ver_codigo(ttk.Button(barra, text="■ Detener", command=self.detener),
+                         self.detener).pack(side="left", padx=3)
         self._ver_codigo(ttk.Button(barra, text="Resultado final", command=self.mostrar_final),
                          self.mostrar_final).pack(side="left", padx=3)
-        self.estado.configure(text="Consejo: clic derecho sobre un botón, un campo o una pestaña "
-                                   "de resultados abre su código en VS Code.")
+        self.estado.configure(text="Consejo: clic derecho sobre cualquier botón, campo, lista o pestaña "
+                                   "abre en VS Code la función que hace ese trabajo.")
 
     def _max_epocas(self):
         return self.res["red"].epocas
@@ -1297,15 +1442,25 @@ class Aplicacion:
                                    "Recomendado con pocos puntos, por ejemplo 5 por clase.")
         self.t_resumen.mostrar(ex.resumen(res))
         if res["tipo"] == "regresion":
-            self.estado.configure(text="Red %s %s  |  ECM en unidades de y = %s  |  R² = %.4f"
+            self.estado.configure(text="Red %s %s  |  ECM en unidades de y = %s  |  R² = %s%s"
                                   % (res["red"].arquitectura(), res["red"].estado(),
-                                     num(res["ecm"]), res["r2"]))
+                                     num(res["ecm"]), num(res["r2"]), self._aviso(res)))
             return
         por_clase = ", ".join("%s: %.0f %%" % (n, e["exactitud"])
                               for n, e in zip(res["nombres"], res["estadisticas"]))
-        self.estado.configure(text="Red %s %s  |  ECM %s  |  exactitud %.1f %% (%s)"
+        self.estado.configure(text="Red %s %s  |  ECM %s  |  exactitud %.1f %% (%s)%s"
                               % (res["red"].arquitectura(), res["red"].estado(),
-                                 num(res["red"].historial_ecm[-1]), res["exactitud"], por_clase))
+                                 num(res["red"].historial_ecm[-1]), res["exactitud"], por_clase,
+                                 self._aviso(res)))
+
+    def _aviso(self, res):
+        """Si el entrenamiento salió mal se avisa en la barra de estado y en un
+        cuadro (ver experimentos.advertencia)."""
+        aviso = ex.advertencia(res)
+        if not aviso:
+            return ""
+        messagebox.showwarning("Revise el entrenamiento", aviso)
+        return "  |  ⚠ " + aviso
 
     def entrenar(self):
         if self.entrenando:
@@ -1350,6 +1505,15 @@ class Aplicacion:
         elif clave == "todos":
             pestana.fig.tight_layout()
         pestana.canvas.draw_idle()
+
+
+def insertar_fila(marco, fila):
+    """Baja una fila todos los controles de 'marco' que están en la fila 'fila'
+    o más abajo, para dejar ese renglón libre (solo es acomodo visual)."""
+    for hijo in marco.grid_slaves():
+        info = hijo.grid_info()
+        if int(info["row"]) >= fila:
+            hijo.grid_configure(row=int(info["row"]) + 1)
 
 
 def leer_vector_seguro(texto):

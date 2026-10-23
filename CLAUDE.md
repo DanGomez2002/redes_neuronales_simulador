@@ -20,5 +20,11 @@ Nada de librerías para la matemática ni para el algoritmo: todo se escribe a m
 - Regresión: misma red con 1 salida lineal (y = S, DeltaSalida = e) o sigmoide; entradas y salida normalizadas; métrica R²; modelos lineal, cuadrático y senoidal para n entradas.
 - El ejemplo XOR 2-3-1 de las diapositivas se reproduce exacto (sin sesgo) en la pestaña "Ejemplo de clase".
 
+## Para la sustentación (el profesor preguntará mucho sobre el código)
+- Clic derecho sobre cualquier control o pestaña abre en VS Code la función que hace ese trabajo (`_ver_codigo` en main.py). Todo control nuevo debe registrarse así.
+- "Resumen y fórmulas" incluye un mapa con archivo, función y línea de cada paso (`experimentos.mapa_del_codigo`).
+- Junto a la tasa se muestra el paso por época ≈ tasa × N (`experimentos.guia_paso`), y al terminar `experimentos.advertencia` avisa si la red divergió, se saturó o no aprendió.
+- Escenarios de regresión (Lineal, Cuadrática, Senoidal) con momento clásico y semilla 2.
+
 ## Archivos
 formulas.py (F1–F27, M1–M11), aleatorio.py, red_neuronal.py, experimentos.py, graficas.py, main.py.

@@ -54,6 +54,9 @@ Todas las fórmulas del proyecto escritas a mano, sin librerías.
 # =====================================================================
 # FUNCIONES MATEMÁTICAS BÁSICAS (sin librerías)
 # =====================================================================
+INFINITO = float("inf")   # valor especial de Python (no es una librería)
+
+
 def valor_absoluto(v):
     """M1:  |v| = v si v >= 0,  -v si v < 0"""
     if v >= 0:
@@ -81,6 +84,8 @@ def raiz_cuadrada(a):
 def arcotangente(z):
     """M3: serie de Taylor (válida para |z| < 1):
            atan(z) = z - z^3/3 + z^5/5 - z^7/7 + ..."""
+    if z != z:                # NaN: la serie nunca terminaría
+        return z
     suma = 0.0
     potencia = z
     n = 0
@@ -121,6 +126,8 @@ LN2 = _serie_ln(2.0)   # ln(2) calculado con la misma serie
 def logaritmo_natural(a):
     """M5: se escribe a = m * 2^k con 1 <= m < 2, entonces
            ln(a) = k * ln(2) + ln(m)"""
+    if a != a or a == INFINITO:   # NaN o infinito: se devuelven tal cual
+        return a
     if a <= 0:
         raise ValueError("El logaritmo solo existe para números positivos")
     k = 0
@@ -137,6 +144,8 @@ def logaritmo_natural(a):
 def coseno(angulo):
     """M6: serie de Taylor:  cos(t) = 1 - t^2/2! + t^4/4! - t^6/6! + ...
     Antes se lleva el ángulo al intervalo [-pi, pi] restando vueltas completas."""
+    if angulo != angulo or angulo == INFINITO or angulo == -INFINITO:
+        return float("nan")   # el coseno de NaN o de infinito no está definido
     vuelta = 2.0 * PI
     t = angulo - int(angulo / vuelta) * vuelta
     if t > PI:
@@ -170,8 +179,6 @@ def maximo(valores):
             mayor = v
     return mayor
 
-
-INFINITO = float("inf")
 
 
 def es_finito(v):

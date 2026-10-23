@@ -60,7 +60,8 @@ CONFIG_REGRESION = {
     "centro_x": [5.0, 5.0, 5.0],
     "desviacion_x": 2.0,
     "distribucion_x": "uniforme",
-    "coeficientes": [2.0, -1.5, 0.5],   # y = 2 x1 - 1.5 x2 + 0.5 x3 + 3 + ruido
+    "coeficientes": [2.0, -1.5, 0.5],   # a1, a2, a3 (con el modelo cuadrático:
+                                        # y = 2 x1² - 1,5 x2² + 0,5 x3² + 3 + ruido)
     "sesgo": 3.0,
     "modelo": "cuadratico",             # "lineal", "cuadratico" o "senoidal"
     "desviacion_ruido": 1.0,
@@ -289,10 +290,68 @@ def clasificar_punto(res, x):
 
 
 # ======================================================================
+def guia_paso(tasa, N, ajuste, tipo_momento, alfa, salida_lineal=False):
+    """Relación entre la tasa y el número de patrones (guía, no regla exacta).
+    Con el ajuste por época G = Σ entrada·delta SUMA los N patrones, así que el
+    cambio de un peso en una época es del orden de tasa × N: si se duplican los
+    puntos con la misma tasa, el paso se duplica. Con el momento clásico los
+    cambios se acumulan y el paso crece hasta tasa × N / (1 - alfa).
+    Devuelve (texto, nivel) con nivel 'ok' o 'alto'."""
+    if ajuste == "patron":
+        texto = "Ajuste por patrón: %d ajustes por época, cada uno de tamaño ≈ tasa = %s" % (
+            N, num_corto(tasa))
+        paso = tasa
+        limite = 0.05 if salida_lineal else 1.0
+    else:
+        paso = tasa * N
+        texto = "Paso por época ≈ tasa × N = %s × %d = %s" % (num_corto(tasa), N, num_corto(round_3(paso)))
+        limite = 1.5 if salida_lineal else 40.0
+    if tipo_momento == "clasico" and alfa < 1:
+        efectivo = paso / (1.0 - alfa)
+        texto += ";  con α = %s ≈ %s" % (num_corto(alfa), num_corto(round_3(efectivo)))
+        if efectivo > limite * 15:
+            return texto + "  → alto: puede oscilar o divergir", "alto"
+    if paso > limite:
+        consejo = "la salida lineal puede divergir" if salida_lineal else "puede oscilar o saturar las neuronas"
+        return texto + "  → alto: %s, baje la tasa" % consejo, "alto"
+    return texto + "  → adecuado", "ok"
+
+
+def round_3(v):
+    """Tres cifras significativas para mostrar (sin librerías)."""
+    return float("%.3g" % v)
+
+
+def advertencia(res):
+    """Diagnóstico del entrenamiento para avisar cuando la red no aprendió,
+    aunque no haya NaN. La sigmoide nunca da NaN: si la tasa es muy grande
+    las sumas S crecen, y(1-y) se vuelve casi 0 (neuronas saturadas) y los
+    pesos dejan de cambiar. Devuelve '' si todo está bien."""
+    red = res["red"]
+    if red.divergio:
+        return "La red divergió: reduzca la tasa de aprendizaje."
+    if res["tipo"] == "regresion":
+        if res["r2"] < 0.5:
+            return ("R² bajo: la red no ajusta bien los datos. Pruebe más épocas, el momento "
+                    "clásico, otra tasa o más neuronas ocultas.")
+        return ""
+    k = res["n_clases"]
+    azar = 100.0 / k
+    if res["exactitud"] <= azar + 1.0:
+        return ("La exactitud es la del azar (%.0f %%): la red no aprendió. Suele ser una tasa "
+                "muy grande (neuronas saturadas) o pocas épocas: pruebe una tasa menor." % azar)
+    if red.historial_ecm[-1] >= red.historial_ecm[0]:
+        return "El ECM no bajó respecto al inicial: pruebe una tasa menor o más épocas."
+    return ""
+
+
 def resumen(res):
     """Texto con los resultados y las fórmulas que se usaron."""
     red = res["red"]
     L = ["RESULTADOS: " + res["titulo"], "=" * 70, ""]
+    aviso = advertencia(res)
+    if aviso:
+        L += ["⚠ " + aviso, ""]
     ne, no, ns = red.estructura[0], red.n_capas - 1, red.estructura[-1]
     L.append("Arquitectura: %s   (%d entrada%s, %d capa%s oculta%s, %d salida%s)" % (
         red.arquitectura(), ne, "" if ne == 1 else "s", no, "" if no == 1 else "s",
@@ -335,6 +394,8 @@ def resumen(res):
                         "; ".join("%.2f" % v for v in est["media"])))
             L.append("      desviación pedida %.2f -> obtenida %.2f (F23)"
                      % (clase["desviacion"], est["desviacion"]))
+    L += ["", "DÓNDE ESTÁ CADA PASO EN EL CÓDIGO (clic derecho en la interfaz abre cada uno)",
+          "-" * 70] + mapa_del_codigo()
     L.append("")
     L.append("PESOS FINALES")
     for c in range(red.n_capas):
@@ -359,6 +420,50 @@ def resumen(res):
           "F26 R² = 1 - Σ(d - y)² / Σ(d - media)²",
           "M10 e^x = 2^k * e^r (serie de Taylor), sin librerías"]
     return "\n".join(L)
+
+
+def mapa_del_codigo():
+    """Lista de los pasos del método con el archivo, la función y la línea
+    donde están. Las líneas se leen del propio código (funcion.__code__), así
+    que siempre coinciden aunque el archivo cambie."""
+    import formulas as F
+    import aleatorio as A
+    import red_neuronal as R
+    import graficas as G
+    pasos = [
+        ("Suma ponderada S = Σ w·x + θ·x0 (F1)", F.suma_ponderada),
+        ("Sigmoide y = 1 / (1 + e^-S) (F2)", F.sigmoide),
+        ("Exponencial e^x sin librerías (M10)", F.exponencial),
+        ("Derivada y' = y(1 - y) (F3)", F.derivada_sigmoide),
+        ("Error e = d - y (F4)", F.error_salida),
+        ("DeltaSalida = e · y' (F5)", F.delta_salida),
+        ("DeltaSalida lineal = e (F25)", F.delta_salida_lineal),
+        ("DeltaCamada = y' · Σ(peso · delta) (F6)", F.delta_camada),
+        ("Propagación hacia adelante (capa por capa)", R.propagar_con),
+        ("Retropropagación: deltas de atrás hacia adelante", R.RedNeuronal.retropropagar),
+        ("Acumular G = Σ entrada · delta (F7)", R.RedNeuronal._acumular),
+        ("Ajuste de todos los pesos (F8 / F9)", R.RedNeuronal._aplicar),
+        ("Fórmula del profesor: Peso·Momento + G·Tasa (F8)", F.ajuste_profesor),
+        ("Momento clásico (F9)", F.ajuste_momento_clasico),
+        ("Ciclo de épocas y criterios de parada", R.RedNeuronal.entrenar),
+        ("Error de la época E = ½ Σ e² (F10)", F.error_epoca),
+        ("Error cuadrático medio (F11)", F.error_cuadratico_medio),
+        ("Exactitud / R² de cada época (F12 / F26)", R.RedNeuronal._metrica),
+        ("Clase que da la red (F14)", F.clase_de_la_salida),
+        ("Función de la superficie de separación (F15)", F.funcion_frontera),
+        ("Normalización mín-máx (F16)", F.normalizar),
+        ("Generador congruencial (F17)", A.GeneradorAleatorio.uniforme01),
+        ("Datos de clasificación (nubes)", A.generar_nubes),
+        ("Datos de regresión", A.generar_datos_regresion),
+        ("Superficie 3D: marching tetrahedra", G.triangulos_superficie),
+        ("Diagnóstico tasa × N", guia_paso),
+    ]
+    lineas = []
+    for texto, funcion in pasos:
+        ruta = funcion.__code__.co_filename.replace("\\", "/").split("/")[-1]
+        lineas.append("   %-50s %s, línea %d  (%s)" % (texto, ruta, funcion.__code__.co_firstlineno,
+                                                       funcion.__qualname__))
+    return lineas
 
 
 def centros_por_defecto(n_clases, n_entradas):
