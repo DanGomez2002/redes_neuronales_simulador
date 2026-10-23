@@ -14,6 +14,9 @@ formulas.py y red_neuronal.py, sin librerías.
 Autor: Carlos Daniel Gómez Murcia — Computacional I
 """
 
+import os
+import shutil
+import subprocess
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -357,16 +360,19 @@ class Aplicacion:
         return widget
 
     def _abrir_codigo(self, funcion):
-        ruta = str(self.raiz.tk.call("file", "normalize", funcion.__code__.co_filename))
+        ruta = os.path.abspath(funcion.__code__.co_filename)
         linea = funcion.__code__.co_firstlineno
         self.estado.configure(text="Código de %s: %s, línea %d"
-                              % (funcion.__qualname__, ruta.split("/")[-1], linea))
-        if self.raiz.tk.call("tk", "windowingsystem") != "win32":
-            return
-        try:  # Windows abre la dirección vscode://file/ruta:línea con VS Code
-            self.raiz.tk.call("exec", "cmd", "/c", "start", "",
-                              "vscode://file/%s:%d" % (ruta, linea), "&")
-        except tk.TclError:
+                              % (funcion.__qualname__, os.path.basename(ruta), linea))
+        destino = "%s:%d" % (ruta, linea)
+        code = shutil.which("code")
+        try:
+            if code:  # línea de comandos de VS Code: -g abre el archivo en esa línea y trae la ventana al frente
+                subprocess.Popen([code, "-g", destino],
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            elif os.name == "nt":  # sin 'code' en el PATH: la dirección vscode://file/ruta:línea
+                os.startfile("vscode://file/" + destino.replace("\\", "/"))
+        except OSError:
             pass
 
     def _codigo_pestana(self, evento):
