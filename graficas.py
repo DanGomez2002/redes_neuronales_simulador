@@ -7,9 +7,12 @@ para DIBUJAR: la superficie de separación se calcula aquí a mano evaluando la
 red en una rejilla y buscando dónde cambia de clase (marching tetrahedra).
 
 Pestañas:
-  1. Espacio      3 entradas: puntos 3D y superficie de separación (F15)
-                  2 entradas: plano con las regiones de cada clase y su frontera
-  2. Errores      error de la época (F10), ECM (F11) y exactitud (F12) por época
+  1. Espacio      Clasificación: con 3 entradas, puntos 3D y superficie de
+                  separación (F15); con 2, regiones y frontera en el plano.
+                  Regresión: la curva (1 entrada) o superficie (2 entradas) que
+                  aprendió la red; con 3 entradas un corte en x3 = media; y
+                  siempre la gráfica "real vs. predicho".
+  2. Errores      error de la época (F10), ECM (F11) y exactitud (F12) o R² (F26)
   3. Pesos por capa   la evolución de los pesos, una gráfica por capa
   4. Todos los pesos  todos los pesos de la red en una sola gráfica
   5. Red          el diagrama de la red con los pesos de la época elegida
@@ -92,12 +95,12 @@ def _salidas_en_rejilla(res, epoca, ejes):
             for j, b in enumerate(ejes[1]):
                 for k, c in enumerate(ejes[2]):
                     x = ex.entrada_de_la_red(mins, maxs, [a, b, c])
-                    salidas[(i, j, k)] = propagar_con(pesos, sesgos, red.x0, x)[-1]
+                    salidas[(i, j, k)] = propagar_con(pesos, sesgos, red.x0, x, red.salida_lineal)[-1]
     else:
         for i, a in enumerate(ejes[0]):
             for j, b in enumerate(ejes[1]):
                 x = ex.entrada_de_la_red(mins, maxs, [a, b])
-                salidas[(i, j)] = propagar_con(pesos, sesgos, red.x0, x)[-1]
+                salidas[(i, j)] = propagar_con(pesos, sesgos, red.x0, x, red.salida_lineal)[-1]
     if len(res["cache"]) > 60:      # no guardar demasiadas épocas en memoria
         res["cache"].clear()
     res["cache"][clave] = salidas
@@ -194,6 +197,8 @@ def _sombreado(triangulos, color, alfa, escala):
 # ----------------------------------------------------------------------
 def dibujar_espacio(fig, res, epoca=None, vista=None):
     n = len(res["X"][0])
+    if res["tipo"] == "regresion":
+        return _espacio_regresion(fig, res, epoca, vista)
     if n == 3:
         return _espacio_3d(fig, res, epoca, vista)
     if n == 2:
@@ -383,6 +388,11 @@ def dibujar_errores(fig, res, epoca=None):
     datos = [(red.historial_error, "E = ½ Σ (d − y)²", "Error de la época (F10)", "#1f3a5f"),
              (red.historial_ecm, "ECM = Σ (d − y)² / (N·m)", "Error cuadrático medio (F11)", "#c0392b"),
              (red.historial_exactitud, "Exactitud (%)", "Exactitud (F12)", "#2ca02c")]
+    if red.regresion:
+        datos[2] = (red.historial_r2, "R²", "Coeficiente de determinación R² (F26)", "#2ca02c")
+        if res.get("y_min") is not None:
+            datos[0] = (datos[0][0], datos[0][1] + "   (y normalizada)", datos[0][2], datos[0][3])
+            datos[1] = (datos[1][0], datos[1][1] + "   (y normalizada)", datos[1][2], datos[1][3])
     for n, (valores, etiqueta_y, titulo, color) in enumerate(datos):
         ax = fig.add_subplot(1, 3, n + 1)
         finitos = [v if es_finito(v) else None for v in valores]
@@ -391,6 +401,11 @@ def dibujar_errores(fig, res, epoca=None):
             ax.axvline(epoca, color="black", linestyle="--", linewidth=1)
             if es_finito(valores[epoca]):
                 ax.plot([epoca], [valores[epoca]], marker="o", color="black")
+        if red.regresion and n == 2:
+            # R² empieza muy negativo (red sin entrenar): se muestra de -1 a 1
+            validos = [v for v in valores if es_finito(v)]
+            if validos:
+                ax.set_ylim(maximo([minimo(validos), -1.0]) - 0.05, 1.05)
         ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=6))
         ax.set_xlabel("Época")
         ax.set_ylabel(etiqueta_y)
@@ -531,3 +546,110 @@ def dibujar_red(fig, res, epoca=None):
     ax.set_title("Red %s — pesos de la época %d (grosor ∝ |peso|)" % (red.arquitectura(), ep),
                  fontsize=11)
 
+
+
+# ----------------------------------------------------------------------
+# 1b. Espacio de la regresión
+# ----------------------------------------------------------------------
+COLOR_DATOS = "#1f77b4"
+COLOR_RED = "#d62728"
+
+
+def _espacio_regresion(fig, res, epoca, vista):
+    """Izquierda: lo que aprendió la red junto a los datos.
+       1 entrada:  puntos (x, y) y la curva y = f(x) de la red.
+       2 entradas: puntos (x1, x2, y) y la superficie y = f(x1, x2).
+       3 entradas: son 4 dimensiones; se dibuja el corte x3 = media (F22) y a
+                   cada punto se le quita el efecto de x3 según la propia red:
+                   y_corregido = y - [ f(x1, x2, x3) - f(x1, x2, media) ].
+       Derecha: real vs. predicho (sirve con cualquier número de entradas)."""
+    fig.clear()
+    X, y = res["X"], res["y"]
+    n = len(X[0])
+    ep = _epoca_real(res, epoca)
+    predichos = [ex.prediccion(res, x, ep) for x in X]
+    if not all(es_finito(v) for v in predichos):
+        ax = fig.add_subplot(111)
+        ax.axis("off")
+        ax.text(0.5, 0.5, "Las predicciones son infinitas o NaN: la red divergió.\n"
+                          "Reduzca la tasa de aprendizaje y vuelva a entrenar.",
+                ha="center", va="center", fontsize=13, transform=ax.transAxes)
+        return ax
+    columnas = 2 if n <= 3 else 1
+    if n == 1:
+        ax = fig.add_subplot(1, 2, 1)
+        xs = [x[0] for x in X]
+        ax.scatter(xs, y, s=12, color=COLOR_DATOS, label="Datos", zorder=3)
+        lo, hi = _rango(xs, 0.02)
+        malla = _rejilla(lo, hi, 150)
+        ax.plot(malla, [ex.prediccion(res, [v], ep) for v in malla], color=COLOR_RED,
+                linewidth=2.2, label="Curva de la red  y = f(x)")
+        if res.get("punto"):
+            ax.scatter([res["punto"][0][0]], [res["punto"][1]], marker="*", s=320, color="#ffbf00",
+                       edgecolors="black", zorder=5, label="Punto nuevo (predicción)")
+        ax.set_xlabel("x1"); ax.set_ylabel("y")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+        ax.set_title("Curva que aprendió la red", fontsize=10)
+    elif n <= 3:
+        ax = fig.add_subplot(1, 2, 1, projection="3d")
+        if vista:
+            ax.view_init(elev=vista[0], azim=vista[1])
+        l1, l2 = _rango([x[0] for x in X], 0.02), _rango([x[1] for x in X], 0.02)
+        e1, e2 = _rejilla(l1[0], l1[1], 24), _rejilla(l2[0], l2[1], 24)
+        if n == 2:
+            fijo = []
+            z = y
+            subtitulo = "Superficie que aprendió la red  y = f(x1, x2)"
+            etiqueta_z = "y"
+        else:
+            m3 = media([x[2] for x in X])                                        # F22
+            fijo = [m3]
+            z = [yi - (yp - ex.prediccion(res, [x[0], x[1], m3], ep))
+                 for x, yi, yp in zip(X, y, predichos)]
+            subtitulo = "Corte de la red con x3 = %.2f (media); puntos corregidos" % m3
+            etiqueta_z = "y corregido"
+        clave = ("superficie", ep, n)
+        if clave not in res["cache"]:
+            res["cache"][clave] = [[ex.prediccion(res, [a, b] + fijo, ep) for a in e1] for b in e2]
+        Z = res["cache"][clave]
+        # La superficie se arma con cuadriláteros de la rejilla (uno por celda)
+        cuadros = []
+        for j in range(len(e2) - 1):
+            for i in range(len(e1) - 1):
+                cuadros.append([[e1[i], e2[j], Z[j][i]], [e1[i + 1], e2[j], Z[j][i + 1]],
+                                [e1[i + 1], e2[j + 1], Z[j + 1][i + 1]], [e1[i], e2[j + 1], Z[j + 1][i]]])
+        todos_z = [v for fila in Z for v in fila] + z
+        escala = [l1[1] - l1[0], l2[1] - l2[0], (maximo(todos_z) - minimo(todos_z)) or 1.0]
+        ax.add_collection3d(Poly3DCollection(cuadros, facecolors=_sombreado(cuadros, COLOR_RED, 0.4, escala),
+                                             edgecolors=(0.6, 0.1, 0.1, 0.15), linewidths=0.3))
+        ax.set_xlim(*l1); ax.set_ylim(*l2); ax.set_zlim(*_rango(todos_z, 0.05))
+        ax.scatter([x[0] for x in X], [x[1] for x in X], z, color=COLOR_DATOS, s=10,
+                   depthshade=False, label="Datos")
+        ax.plot([], [], color=COLOR_RED, linewidth=8, alpha=0.5, label="Superficie de la red")
+        if res.get("punto") and n == 2:
+            p, v = res["punto"]
+            ax.scatter([p[0]], [p[1]], [v], marker="*", s=320, color="#ffbf00", edgecolors="black",
+                       depthshade=False, label="Punto nuevo (predicción)")
+        ax.set_xlabel("x1"); ax.set_ylabel("x2"); ax.set_zlabel(etiqueta_z)
+        ax.legend(loc="upper left", fontsize=8)
+        ax.set_title(subtitulo, fontsize=10)
+    # --- real vs. predicho ---
+    ax2 = fig.add_subplot(1, columnas, columnas)
+    ax2.scatter(y, predichos, s=10, color=COLOR_DATOS, label="Puntos")
+    lo, hi = minimo(y), maximo(y)
+    ax2.plot([lo, hi], [lo, hi], color=COLOR_RED, label="Ajuste perfecto (predicho = real)")
+    ax2.set_xlabel("y real (deseado)")
+    ax2.set_ylabel("y de la red (obtenido)")
+    from formulas import coeficiente_determinacion
+    ax2.set_title("Real vs. predicho — R² = %.4f (F26)" % coeficiente_determinacion(y, predichos),
+                  fontsize=10)
+    ax2.grid(alpha=0.3)
+    ax2.legend(fontsize=8)
+    if n > 3:
+        ax2.text(0.02, 0.98, "Con %d entradas no se puede dibujar la superficie;\n"
+                             "esta gráfica sirve con cualquier número de entradas." % n,
+                 transform=ax2.transAxes, va="top", fontsize=9, color="#555")
+    fig.suptitle(_titulo(res, epoca), fontsize=11)
+    fig.subplots_adjust(left=0.07 if n > 3 else 0.04, right=0.97, bottom=0.1, top=0.88, wspace=0.32)
+    return ax2

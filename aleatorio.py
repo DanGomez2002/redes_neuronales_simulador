@@ -15,9 +15,10 @@ import time
 
 from formulas import (congruencial_lineal, uniforme_01, normal_box_muller,
                       uniforme_media_desviacion, exponencial_inversa,
-                      binomial_estandarizada, raiz_cuadrada, redondear)
+                      binomial_estandarizada, raiz_cuadrada, redondear, seno)
 
 DISTRIBUCIONES = ("normal", "uniforme", "exponencial", "binomial")
+MODELOS_REGRESION = ("lineal", "cuadratico", "senoidal")
 
 
 class GeneradorAleatorio:
@@ -173,3 +174,28 @@ def centros_automaticos(n_clases, n_entradas, semilla=12345, separacion=6.0):
                 break
         centros.append(mejor)
     return centros
+
+
+def generar_datos_regresion(generador, n, centro_x, desviacion_x, distribucion_x,
+                            coeficientes, sesgo, modelo, desviacion_ruido, distribucion_ruido):
+    """n puntos con tantas entradas como coordenadas tenga centro_x.
+    Modelo lineal:      y = a1*x1 + a2*x2 + ... + b + ruido
+    Modelo cuadrático:  y = a1*x1^2 + a2*x2^2 + ... + b + ruido
+    Modelo senoidal:    y = a1*sen(x1) + a2*sen(x2) + ... + b + ruido   (F27)
+    El cuadrático y el senoidal no son planos: el perceptrón de la entrega 1 no
+    podía ajustarlos y la red con capa oculta sí."""
+    X, y = [], []
+    for _ in range(n):
+        x = [generador.muestra(distribucion_x, c, desviacion_x) for c in centro_x]
+        base = 0.0
+        for a, xj in zip(coeficientes, x):
+            if modelo == "cuadratico":
+                base = base + a * xj * xj
+            elif modelo == "senoidal":
+                base = base + a * seno(xj)                                   # F27
+            else:
+                base = base + a * xj
+        ruido = generador.muestra(distribucion_ruido, 0.0, desviacion_ruido)
+        X.append(x)
+        y.append(base + sesgo + ruido)
+    return X, y

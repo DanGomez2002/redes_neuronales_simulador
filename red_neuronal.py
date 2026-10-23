@@ -24,27 +24,39 @@ Pasos de una época (ajuste por época, el del profesor):
        (o el momento clásico, F9, si se elige esa opción)
 
 Con el ajuste por patrón el paso 2 se hace después de CADA patrón.
+
+REGRESIÓN: la red es la misma; solo cambia la neurona de salida, que puede ser
+lineal (y = S, F24, con DeltaSalida = e, F25) para que la red entregue
+cualquier número y no solo valores entre 0 y 1. Las capas ocultas siguen
+siendo sigmoides: ellas son las que permiten ajustar curvas.
 """
 
 from formulas import (suma_ponderada, sigmoide, error_salida, delta_salida,
                       delta_camada, entrada_por_delta, ajuste_profesor,
                       ajuste_momento_clasico, error_epoca, error_cuadratico_medio,
-                      exactitud, clase_de_la_salida, valor_absoluto, es_finito)
+                      exactitud, clase_de_la_salida, valor_absoluto, es_finito,
+                      funcion_lineal, delta_salida_lineal, coeficiente_determinacion,
+                      minimo)
 
 MAX_LINEAS_REGISTRO = 6000
 
 
-def propagar_con(pesos, sesgos, x0, x):
+def propagar_con(pesos, sesgos, x0, x, salida_lineal=False):
     """Propagación hacia adelante con unos pesos dados.
     Devuelve la lista de salidas de cada capa: a[0] = x (entradas),
-    a[1] = salidas de la capa oculta 1, ..., a[-1] = salidas de la red."""
+    a[1] = salidas de la capa oculta 1, ..., a[-1] = salidas de la red.
+    salida_lineal = True: la última capa usa y = S (regresión, F24)."""
     a = [x]
+    ultima = len(pesos) - 1
     for c in range(len(pesos)):
         anterior = a[-1]
         salidas = []
         for j in range(len(pesos[c])):
             S = suma_ponderada(pesos[c][j], anterior, sesgos[c][j], x0)       # F1
-            salidas.append(sigmoide(S))                                       # F2
+            if c == ultima and salida_lineal:
+                salidas.append(funcion_lineal(S))                             # F24
+            else:
+                salidas.append(sigmoide(S))                                   # F2
         a.append(salidas)
     return a
 
@@ -53,7 +65,8 @@ class RedNeuronal:
 
     def __init__(self, estructura, generador, tasa=0.3, momento=1.0,
                  tipo_momento="profesor", alfa=0.9, ajuste="epoca",
-                 usar_sesgo=True, x0=-1, nombre="Red neuronal"):
+                 usar_sesgo=True, x0=-1, nombre="Red neuronal", salida="sigmoide",
+                 regresion=False):
         if len(estructura) < 2:
             raise ValueError("La red necesita al menos la capa de entrada y la de salida.")
         self.estructura = list(estructura)
@@ -66,6 +79,8 @@ class RedNeuronal:
         self.usar_sesgo = usar_sesgo
         self.x0 = x0 if usar_sesgo else 0
         self.nombre = nombre
+        self.salida_lineal = salida == "lineal"   # F24 en la capa de salida
+        self.regresion = regresion                # mide R² en vez de exactitud
         # Pesos y sesgos iniciales aleatorios en (-1, 1)
         self.pesos, self.sesgos = [], []
         for c in range(1, len(estructura)):
@@ -78,12 +93,14 @@ class RedNeuronal:
         self._reiniciar_cambios()
         self.historial_error = []      # F10 de cada época (índice k = pesos tras k ajustes)
         self.historial_ecm = []        # F11
-        self.historial_exactitud = []  # F12
+        self.historial_exactitud = []  # F12 (clasificación)
+        self.historial_r2 = []         # F26 (regresión)
         self.historial_pesos = []      # copia de (pesos, sesgos) en cada época
         self.epocas = 0
         self.convergio = False
         self.divergio = False
         self.detenido = False
+        self.estancado = False
 
     # ------------------------------------------------------------------
     @property
@@ -122,9 +139,9 @@ class RedNeuronal:
     # ------------------------------------------------------------------
     def propagar(self, x, epoca=None):
         if epoca is None:
-            return propagar_con(self.pesos, self.sesgos, self.x0, x)
+            return propagar_con(self.pesos, self.sesgos, self.x0, x, self.salida_lineal)
         pesos, sesgos = self.pesos_en_epoca(epoca)
-        return propagar_con(pesos, sesgos, self.x0, x)
+        return propagar_con(pesos, sesgos, self.x0, x, self.salida_lineal)
 
     def salida(self, x, epoca=None):
         return self.propagar(x, epoca)[-1]
@@ -140,7 +157,10 @@ class RedNeuronal:
         y = a[-1]
         errores = [error_salida(d[j], y[j]) for j in range(len(y))]          # F4
         deltas = [None] * L
-        deltas[L - 1] = [delta_salida(errores[j], y[j]) for j in range(len(y))]   # F5
+        if self.salida_lineal:
+            deltas[L - 1] = [delta_salida_lineal(e) for e in errores]                # F25
+        else:
+            deltas[L - 1] = [delta_salida(errores[j], y[j]) for j in range(len(y))]   # F5
         for c in range(L - 2, -1, -1):
             siguiente = self.pesos[c + 1]
             capa = []
@@ -187,36 +207,67 @@ class RedNeuronal:
                                                             Gt[c][j], self.tasa)
 
     # ------------------------------------------------------------------
+    def _metrica(self, D, salidas, etiquetas):
+        """Clasificación: exactitud (F12) con la clase de cada salida (F14).
+        Regresión: R² (F26) entre lo deseado y lo que dio la red."""
+        if self.regresion:
+            reales, predichos = [], []
+            for d, y in zip(D, salidas):
+                reales.extend(d)
+                predichos.extend(y)
+            for v in predichos:
+                if not es_finito(v):
+                    return v
+            return coeficiente_determinacion(reales, predichos)
+        return exactitud([clase_de_la_salida(y) for y in salidas], etiquetas)
+
     def evaluar(self, X, D, etiquetas):
         """Pasa todo el conjunto hacia adelante con los pesos actuales y
-        devuelve (E de F10, ECM de F11, exactitud de F12)."""
-        errores, predicciones = [], []
+        devuelve (E de F10, ECM de F11, exactitud F12 o R² F26)."""
+        errores, salidas = [], []
         for x, d in zip(X, D):
-            y = propagar_con(self.pesos, self.sesgos, self.x0, x)[-1]
+            y = propagar_con(self.pesos, self.sesgos, self.x0, x, self.salida_lineal)[-1]
             for j in range(len(y)):
                 errores.append(error_salida(d[j], y[j]))
-            predicciones.append(clase_de_la_salida(y))
+            salidas.append(y)
         return (error_epoca(errores), error_cuadratico_medio(errores),
-                exactitud(predicciones, etiquetas))
+                self._metrica(D, salidas, etiquetas))
 
-    def _registrar_estado(self, E, ecm, exa):
+    def _registrar_estado(self, E, ecm, metrica):
         self.historial_error.append(E)
         self.historial_ecm.append(ecm)
-        self.historial_exactitud.append(exa)
+        if self.regresion:
+            self.historial_r2.append(metrica)
+        else:
+            self.historial_exactitud.append(metrica)
         self.historial_pesos.append(self.copiar_pesos())
 
+    def nombre_metrica(self):
+        return "R²" if self.regresion else "exactitud"
+
+    def texto_metrica(self, v):
+        if self.regresion:
+            return "R² = %s" % num(v)
+        return "exactitud = %.2f %%" % v
+
     def entrenar(self, X, D, etiquetas, max_epocas=1000, ecm_objetivo=0.0,
-                 barajar=False, registro=None, epocas_registro=2, progreso=None):
+                 barajar=False, registro=None, epocas_registro=2, progreso=None,
+                 tolerancia=None, paciencia=50):
         """Entrena por épocas.  D[p] = salidas deseadas del patrón p.
         Se detiene cuando ECM <= ecm_objetivo (convergió), cuando los pesos
         dejan de ser números finitos (divergió) o al llegar a max_epocas.
         Si 'registro' es una lista, se anotan las cuentas de las primeras
         'epocas_registro' épocas (como las tablas de las diapositivas).
         progreso(epoca, max_epocas, ecm): función opcional que la interfaz usa
-        para mostrar el avance; si devuelve True el entrenamiento se detiene."""
+        para mostrar el avance; si devuelve True el entrenamiento se detiene.
+        tolerancia: si en las últimas 'paciencia' épocas el ECM no mejoró más que
+        esa proporción respecto al mejor anterior, se detiene (se estabilizó).
+        Sirve en regresión, donde el ruido no deja que el ECM llegue a cero.
+        etiquetas = None en regresión."""
         self.historial_error, self.historial_ecm = [], []
         self.historial_exactitud, self.historial_pesos = [], []
-        self.convergio = self.divergio = self.detenido = False
+        self.historial_r2 = []
+        self.convergio = self.divergio = self.detenido = self.estancado = False
         self.epocas = 0
         self._reiniciar_cambios()
         orden = list(range(len(X)))
@@ -231,24 +282,24 @@ class RedNeuronal:
                 # Una pasada con los pesos actuales: sirve a la vez para medir el
                 # error de la época y para acumular G = Σ entrada*delta (F7).
                 G, Gt = self._gradientes_vacios()
-                todos_errores, predicciones = [], []
+                todos_errores, salidas = [], []
                 for p in orden:
-                    a = propagar_con(self.pesos, self.sesgos, self.x0, X[p])
+                    a = propagar_con(self.pesos, self.sesgos, self.x0, X[p], self.salida_lineal)
                     errores, deltas = self.retropropagar(a, D[p])
                     self._acumular(G, Gt, a, deltas)
                     todos_errores.extend(errores)
-                    predicciones.append(clase_de_la_salida(a[-1]))               # F14
+                    salidas.append(a[-1])
                     if anotar:
                         self._anotar_patron(registro, p, a, D[p], errores, deltas)
                 E = error_epoca(todos_errores)                                    # F10
                 ecm = error_cuadratico_medio(todos_errores)                       # F11
-                exa = exactitud(predicciones, etiquetas)                          # F12
+                exa = self._metrica(D, salidas, etiquetas)                        # F12 / F26
             else:
                 E, ecm, exa = self.evaluar(X, D, etiquetas)
             self._registrar_estado(E, ecm, exa)
             _anotar(registro if anotar else None,
                     "\n  -> Error de la época (pesos antes del ajuste): E = ½Σe² = %s   "
-                    "ECM = %s   exactitud = %.2f %%" % (num(E), num(ecm), exa))
+                    "ECM = %s   %s" % (num(E), num(ecm), self.texto_metrica(exa)))
 
             if not es_finito(E):
                 self.divergio = True
@@ -260,6 +311,13 @@ class RedNeuronal:
                 break
             if epoca == max_epocas:
                 break
+            h = self.historial_ecm
+            if tolerancia is not None and len(h) > paciencia:
+                mejor_antes = minimo(h[:-paciencia])
+                mejor_reciente = minimo(h[-paciencia:])
+                if mejor_reciente >= (1.0 - tolerancia) * mejor_antes:
+                    self.estancado = True
+                    break
             if progreso is not None and progreso(epoca, max_epocas, ecm):
                 self.detenido = True
                 break
@@ -273,7 +331,7 @@ class RedNeuronal:
                 if barajar:
                     self.generador.barajar(orden)
                 for p in orden:
-                    a = propagar_con(self.pesos, self.sesgos, self.x0, X[p])
+                    a = propagar_con(self.pesos, self.sesgos, self.x0, X[p], self.salida_lineal)
                     errores, deltas = self.retropropagar(a, D[p])
                     G, Gt = self._gradientes_vacios()
                     self._acumular(G, Gt, a, deltas)
@@ -294,6 +352,8 @@ class RedNeuronal:
             return "alcanzó el ECM objetivo en %d época%s" % (e, s)
         if self.detenido:
             return "detenido por el usuario en la época %d" % e
+        if self.estancado:
+            return "se estabilizó en %d época%s (el ECM dejó de bajar)" % (e, s)
         return "terminó las %d época%s" % (e, s)
 
     # ------------------------------------------------------------------
@@ -329,7 +389,10 @@ class RedNeuronal:
         for c in range(self.n_capas):
             _anotar(registro, "   %-16s salidas y = (%s)" % (self.nombre_capa(c) + ":", lista(a[c + 1])))
         _anotar(registro, "   Error e = d - y            = (%s)" % lista(errores))
-        _anotar(registro, "   DeltaSalida = e * y(1-y)   = (%s)" % lista(deltas[-1]))
+        if self.salida_lineal:
+            _anotar(registro, "   DeltaSalida = e * 1 (lineal) = (%s)" % lista(deltas[-1]))
+        else:
+            _anotar(registro, "   DeltaSalida = e * y(1-y)   = (%s)" % lista(deltas[-1]))
         for c in range(self.n_capas - 2, -1, -1):
             _anotar(registro, "   DeltaCamada %d = y(1-y)*Σ(peso*Delta) = (%s)"
                     % (c + 1, lista(deltas[c])))

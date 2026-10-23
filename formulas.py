@@ -21,6 +21,13 @@ Todas las fórmulas del proyecto escritas a mano, sin librerías.
     F14 Clase de la red ................ 1 salida: clase 2 si y >= 0,5 ; varias: la de mayor y
     F15 Superficie de separación ....... 1 salida: y = 0,5 ; varias: y_k = max(y_j, j != k)
     F16 Normalización mín-máx .......... x' = (x - min) / (max - min)
+                                         y desnormalización  x = x' * (max - min) + min
+
+    REGRESIÓN (la misma red, cambia la neurona de salida)
+    F24 Función lineal de la salida .... y = S          (derivada y' = 1)
+    F25 Delta de la salida lineal ...... DeltaSalida = e * 1 = e
+    F26 Coeficiente R² ................. R² = 1 - sum((d - y)^2) / sum((d - media)^2)
+    F27 Seno ........................... sen(t) = cos(t - pi/2)   (datos senoidales)
 
     SIMULACIÓN DE DATOS (igual que en la entrega 1)
     F17 Generador congruencial ......... X(k+1) = (a*X(k) + c) mod m ;  U = (X + 0.5) / m
@@ -207,6 +214,8 @@ def exponencial(x):
        (con |r| <= 0.35 bastan unos 15 términos).
     Fuera de [-745, 709] el resultado no cabe en un número de punto flotante:
     se devuelve 0 o infinito."""
+    if x != x:            # NaN (la red divergió): se devuelve tal cual
+        return x
     if x > 709.0:
         return INFINITO
     if x < -745.0:
@@ -359,6 +368,44 @@ def funcion_frontera(y, clase):
         return y[0] - 0.5
     otras = [y[j] for j in range(len(y)) if j != clase]
     return y[clase] - maximo(otras)
+
+
+def desnormalizar(v, vmin, vmax):
+    """F16 al revés:  x = x' * (max - min) + min  (vuelve a las unidades originales)."""
+    if vmax == vmin:
+        return vmin
+    return v * (vmax - vmin) + vmin
+
+
+def funcion_lineal(S):
+    """F24:  y = S   (salida de la regresión: un número cualquiera, no solo de 0 a 1)"""
+    return S
+
+
+def delta_salida_lineal(e):
+    """F25:  DeltaSalida = Error * Derivada_FA = e * 1   (la derivada de y = S es 1)"""
+    return e
+
+
+def coeficiente_determinacion(reales, predichos):
+    """F26:  R² = 1 - [ sum((d - y)^2) ] / [ sum((d - media)^2) ]
+    Qué fracción de la variación de d explica la red: 1 es un ajuste perfecto
+    y 0 equivale a predecir siempre la media. Si todos los d son iguales no hay
+    variación que explicar y se devuelve 0."""
+    m = media(reales)
+    suma_residuos = 0.0
+    suma_total = 0.0
+    for d, y in zip(reales, predichos):
+        suma_residuos = suma_residuos + (d - y) * (d - y)
+        suma_total = suma_total + (d - m) * (d - m)
+    if suma_total == 0:
+        return 0.0
+    return 1.0 - suma_residuos / suma_total
+
+
+def seno(t):
+    """F27:  sen(t) = cos(t - pi/2)   (se reutiliza la serie del coseno, M6)"""
+    return coseno(t - PI / 2.0)
 
 
 def normalizar(v, vmin, vmax):

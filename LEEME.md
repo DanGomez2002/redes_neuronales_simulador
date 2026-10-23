@@ -1,11 +1,14 @@
 RED NEURONAL CON BACKPROPAGATION - Entrega 2 (Carlos Daniel Gómez Murcia)
 ==========================================================================
+Clasificación (n clases) y regresión con una red multicapa de n entradas,
+n capas ocultas y n neuronas por capa.
 
 Archivos
 --------
   main.py          Interfaz gráfica (ejecutar este).
   formulas.py      TODAS las fórmulas escritas a mano: la red (F1-F16), la
-                   simulación de datos (F17-F23) y las funciones básicas (M1-M11),
+                   simulación de datos (F17-F23), la regresión (F24-F27: salida
+                   lineal, su delta, R² y seno) y las funciones básicas (M1-M11),
                    incluida la exponencial e^x de la sigmoide (serie de Taylor),
                    la raíz, el logaritmo, el coseno, pi, el mínimo y el máximo.
                    Sin librerías.
@@ -16,7 +19,8 @@ Archivos
                    Sirve para n entradas, n capas ocultas, n neuronas y n salidas.
   aleatorio.py     Generador congruencial, distribuciones (normal, uniforme,
                    exponencial, binomial) y conjuntos de datos: nubes por clase,
-                   XOR en n dimensiones y esfera dentro de una cáscara.
+                   XOR en n dimensiones, esfera dentro de una cáscara y datos de
+                   regresión (modelo lineal, cuadrático o senoidal + ruido).
   experimentos.py  Configuración por defecto, ejecución, ejemplo de clase,
                    clasificación de puntos nuevos y resumen de resultados.
   graficas.py      Dibuja con matplotlib. La superficie de separación se calcula
@@ -55,6 +59,17 @@ Uso de la interfaz
       semilla y registro paso a paso.
     - "Detener" corta el entrenamiento y deja los resultados hasta esa época.
     - Clasificar un punto nuevo: "x1; x2; ...".
+  Pestaña "Regresión":
+    - Entradas (1 a 10), puntos, modelo real (lineal, cuadrático o senoidal),
+      coeficientes "a1; a2; ...", término b, media y desviación de las entradas,
+      ruido. La fórmula del modelo se muestra debajo.
+    - La misma red; la neurona de salida puede ser lineal (y = S, recomendada)
+      o sigmoide (y escalada a [0, 1]). Entradas y salida se normalizan (F16).
+    - Se detiene si el ECM deja de mejorar ("Mejora mínima del ECM" en N épocas).
+    - Espacio: 1 entrada -> curva de la red; 2 entradas -> superficie 3D;
+      3 entradas -> corte en x3 = media con los puntos corregidos; siempre la
+      gráfica "real vs. predicho" y el R² (F26). Errores: E, ECM y R² por época.
+    - Predecir y para un punto nuevo "x1; x2; ...".
   Pestaña "Ejemplo de clase": reproduce el XOR de las diapositivas (red 2-3-1,
     tasa 0,3, momento 1) con y sin sesgo.
   Resultados (derecha):
