@@ -1,0 +1,78 @@
+RED NEURONAL CON BACKPROPAGATION - Entrega 2 (Carlos Daniel Gómez Murcia)
+==========================================================================
+
+Archivos
+--------
+  main.py          Interfaz gráfica (ejecutar este).
+  formulas.py      TODAS las fórmulas escritas a mano: la red (F1-F16), la
+                   simulación de datos (F17-F23) y las funciones básicas (M1-M11),
+                   incluida la exponencial e^x de la sigmoide (serie de Taylor),
+                   la raíz, el logaritmo, el coseno, pi, el mínimo y el máximo.
+                   Sin librerías.
+  red_neuronal.py  Clase RedNeuronal: propagación hacia adelante, deltas de la
+                   salida y de cada camada, ajuste por época (lotes) o por
+                   patrón, momento del profesor y momento clásico, historial de
+                   errores y de pesos, registro paso a paso.
+                   Sirve para n entradas, n capas ocultas, n neuronas y n salidas.
+  aleatorio.py     Generador congruencial, distribuciones (normal, uniforme,
+                   exponencial, binomial) y conjuntos de datos: nubes por clase,
+                   XOR en n dimensiones y esfera dentro de una cáscara.
+  experimentos.py  Configuración por defecto, ejecución, ejemplo de clase,
+                   clasificación de puntos nuevos y resumen de resultados.
+  graficas.py      Dibuja con matplotlib. La superficie de separación se calcula
+                   a mano (marching tetrahedra sobre una rejilla).
+
+Requisitos
+----------
+  Python 3.8 o superior (tkinter viene incluido)
+  matplotlib  ->  pip install -r requirements.txt
+
+Ejecución en Visual Studio Code
+-------------------------------
+  1. Archivo > Abrir carpeta... > redes_neuronales_simulador
+  2. Si la carpeta .venv no existe: Terminal > Ejecutar tarea > "Preparar entorno"
+     (crea el entorno e instala matplotlib).
+  3. Elegir el intérprete ".venv" si VS Code lo pregunta.
+  4. Abrir main.py y presionar F5 (o Ctrl+Shift+B).
+  Sin VS Code:  pip install -r requirements.txt   y luego   python main.py
+
+Uso de la interfaz
+------------------
+  Pestaña "Red neuronal" (izquierda):
+    - Entradas (1 a 10), clases (2 a 10) y puntos por clase (el mismo número
+      en todas las clases).
+    - Tipo de datos: nubes (media "x1; x2; ...", desviación y distribución por
+      clase), XOR o esfera. Botones: centros automáticos, acercar, alejar, σ+, σ−.
+    - Escenarios de prueba con 3 entradas: Separadas, Cercanas, Solapadas,
+      XOR 3D y Esfera 3D.
+    - Neuronas por capa oculta separadas por punto y coma: "5" es una capa de
+      5 neuronas; "6; 4" son dos capas; vacío = sin capa oculta.
+      Con 2 clases hay 1 neurona de salida (d = 0 o 1); con k clases hay k
+      salidas (d = 1 en la de su clase y 0 en las demás).
+    - Tasa de aprendizaje, ajuste por época (lotes, el del profesor) o por
+      patrón, momento del profesor (Peso·Momento) o clásico (α·ΔW anterior),
+      épocas, ECM objetivo, sesgo con x0 = −1 o +1, normalizar entradas,
+      semilla y registro paso a paso.
+    - "Detener" corta el entrenamiento y deja los resultados hasta esa época.
+    - Clasificar un punto nuevo: "x1; x2; ...".
+  Pestaña "Ejemplo de clase": reproduce el XOR de las diapositivas (red 2-3-1,
+    tasa 0,3, momento 1) con y sin sesgo.
+  Resultados (derecha):
+    - Espacio: con 3 entradas, puntos 3D y superficie de separación (se rota
+      con el mouse); con 2 entradas, regiones y frontera en el plano; con más
+      entradas no se dibuja (las demás gráficas sí).
+    - Errores: error de la época E = ½Σe², ECM y exactitud, época a época.
+    - Pesos por capa: una gráfica por capa (línea punteada = sesgo θ).
+    - Todos los pesos: todos al mismo tiempo, un color por capa.
+    - Red: diagrama con el valor de cada peso en la época elegida.
+    - Proceso paso a paso: salidas, error, DeltaSalida, DeltaCamada y ajuste
+      de cada peso (activar "Registrar el proceso").
+    - Resumen y fórmulas.
+  Abajo: barra "Época mostrada" y "Animar entrenamiento".
+  Clic derecho sobre un botón, un campo o una pestaña: abre su código en VS Code.
+  Los decimales se pueden escribir con coma o con punto.
+
+Qué se envía
+------------
+  Informe en Word y una carpeta comprimida con los archivos .py, LEEME.md,
+  requirements.txt y la carpeta .vscode. La carpeta .venv NO se envía.
