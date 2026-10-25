@@ -28,3 +28,6 @@ Nada de librerías para la matemática ni para el algoritmo: todo se escribe a m
 
 ## Archivos
 formulas.py (F1–F27, M1–M11), aleatorio.py, red_neuronal.py, experimentos.py, graficas.py, main.py.
+
+## App de estudio
+`app_estudio/atlas_red_neuronal.html` (se abre con doble clic en el navegador). Lleva el código y los números de línea del commit 62719bd: si cambia algún .py, hay que regenerarla para que las líneas sigan coincidiendo. No va en el comprimido que se le entrega al profesor.
