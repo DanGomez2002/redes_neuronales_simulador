@@ -26,8 +26,11 @@ Nada de librerías para la matemática ni para el algoritmo: todo se escribe a m
 - Junto a la tasa se muestra el paso por época ≈ tasa × N (`experimentos.guia_paso`), y al terminar `experimentos.advertencia` avisa si la red divergió, se saturó o no aprendió.
 - Escenarios de regresión (Lineal, Cuadrática, Senoidal) con momento clásico y semilla 2.
 
+## Datos de clasificación
+Nubes (como en la entrega 1) y XOR (el problema de las diapositivas, generalizado a n dimensiones). La esfera se quitó el 27 oct: no era requisito del profesor y era un tema más para estudiar.
+
 ## Archivos
 formulas.py (F1–F27, M1–M11), aleatorio.py, red_neuronal.py, experimentos.py, graficas.py, main.py.
 
 ## App de estudio
-`app_estudio/atlas_red_neuronal.html` (se abre con doble clic en el navegador). Lleva el código y los números de línea del commit 62719bd: si cambia algún .py, hay que regenerarla para que las líneas sigan coincidiendo. No va en el comprimido que se le entrega al profesor.
+`app_estudio/atlas_red_neuronal.html` (se abre con doble clic en el navegador). Lleva el código y los números de línea del commit d9e16bc: si cambia algún .py, hay que regenerarla para que las líneas sigan coincidiendo. No va en el comprimido que se le entrega al profesor.
