@@ -19,7 +19,7 @@ Archivos
                    Sirve para n entradas, n capas ocultas, n neuronas y n salidas.
   aleatorio.py     Generador congruencial, distribuciones (normal, uniforme,
                    exponencial, binomial) y conjuntos de datos: nubes por clase,
-                   XOR en n dimensiones, esfera dentro de una cáscara y datos de
+                   XOR en n dimensiones y datos de
                    regresión (modelo lineal, cuadrático o senoidal + ruido).
   experimentos.py  Configuración por defecto, ejecución, ejemplo de clase,
                    clasificación de puntos nuevos y resumen de resultados.
@@ -46,9 +46,9 @@ Uso de la interfaz
     - Entradas (1 a 10), clases (2 a 10) y puntos por clase (el mismo número
       en todas las clases).
     - Tipo de datos: nubes (media "x1; x2; ...", desviación y distribución por
-      clase), XOR o esfera. Botones: centros automáticos, acercar, alejar, σ+, σ−.
-    - Escenarios de prueba con 3 entradas: Separadas, Cercanas, Solapadas,
-      XOR 3D y Esfera 3D.
+      clase) o XOR. Botones: centros automáticos, acercar, alejar, σ+, σ−.
+    - Escenarios de prueba con 3 entradas: Separadas, Cercanas, Solapadas
+      y XOR 3D.
     - Neuronas por capa oculta separadas por punto y coma: "5" es una capa de
       5 neuronas; "6; 4" son dos capas; vacío = sin capa oculta.
       Con 2 clases hay 1 neurona de salida (d = 0 o 1); con k clases hay k

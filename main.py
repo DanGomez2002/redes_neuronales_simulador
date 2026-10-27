@@ -37,7 +37,7 @@ MAX_ENTRADAS = 10
 MAX_CLASES = 10
 
 # Escenarios de prueba. Los de nubes son los mismos de la entrega 1 (3 entradas);
-# XOR y Esfera necesitan capa oculta: ningún plano los separa.
+# El XOR necesita capa oculta: ningún plano lo separa.
 ESCENARIOS = {
     "Separadas": {"tipo": "nubes", "centros": [[2, 2, 2], [8, 2, 5], [5, 8, 8]],
                   "desv": 1.0, "dist": ["normal", "normal", "normal"],
@@ -49,7 +49,6 @@ ESCENARIOS = {
                   "desv": 1.5, "dist": ["normal", "exponencial", "normal"],
                   "ocultas": "6", "tasa": "0,05", "epocas": "1500"},
     "XOR 3D": {"tipo": "xor", "ocultas": "8", "tasa": "0,1", "epocas": "1500"},
-    "Esfera 3D": {"tipo": "esfera", "ocultas": "6", "tasa": "0,1", "epocas": "2000"},
 }
 # Escenarios de regresión: valores que funcionan bien para mostrar en la
 # sustentación. Usan el momento clásico (con la fórmula del profesor y momento 1
@@ -441,7 +440,7 @@ class Aplicacion:
         tipo.pack(fill="x", pady=(8, 4))
         ttk.Label(tipo, text="Tipo de datos:").pack(side="left")
         self.v_tipo = tk.StringVar(value=cfg["tipo_datos"])
-        for valor, texto in (("nubes", "Nubes (una por clase)"), ("xor", "XOR"), ("esfera", "Esfera")):
+        for valor, texto in (("nubes", "Nubes (una por clase)"), ("xor", "XOR")):
             self._ver_codigo(ttk.Radiobutton(tipo, text=texto, value=valor, variable=self.v_tipo,
                                              command=self._cambio_tipo),
                              ex.generar_datos).pack(side="left", padx=5)
@@ -467,7 +466,7 @@ class Aplicacion:
             self._ver_codigo(ttk.Button(botones, text=texto, width=8, command=comando),
                              self._mover_medias).pack(side="left", padx=2)
 
-        # Parámetros del XOR y de la esfera
+        # Parámetros del XOR
         self.marco_xor = ttk.Frame(datos)
         self.v_xor_desv, _ = self._campo(self.marco_xor, 0, "Desviación de cada esquina",
                                          fmt(cfg["xor_desviacion"]), 8, codigo=ex.generar_xor)
@@ -478,17 +477,6 @@ class Aplicacion:
         ttk.Label(self.marco_xor, style="Nota.TLabel", justify="left",
                   text="Una nube en cada esquina del cubo; la clase es la paridad de la esquina.\n"
                        "Con 2 entradas es la tabla del XOR. Ningún plano lo separa.").grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        self.marco_esfera = ttk.Frame(datos)
-        self.v_esf_centro, _ = self._campo(self.marco_esfera, 0, "Centro (en cada eje)",
-                                           fmt(cfg["esfera_centro"]), 8, codigo=ex.generar_esfera)
-        self.v_esf_r1, _ = self._campo(self.marco_esfera, 1, "Radio de la esfera (clase 1)",
-                                       fmt(cfg["esfera_radio_interno"]), 8, codigo=ex.generar_esfera)
-        self.v_esf_r2, _ = self._campo(self.marco_esfera, 2, "Radio externo de la cáscara (clase 2)",
-                                       fmt(cfg["esfera_radio_externo"]), 8, codigo=ex.generar_esfera)
-        ttk.Label(self.marco_esfera, style="Nota.TLabel", justify="left",
-                  text="Clase 1 dentro de la esfera; clase 2 en una cáscara alrededor.\n"
-                       "La frontera es una superficie cerrada.").grid(
             row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         esc = ttk.Frame(datos)
@@ -672,9 +660,9 @@ class Aplicacion:
 
     def _cambio_tipo(self):
         tipo = self.v_tipo.get()
-        for marco in (self.marco_nubes, self.marco_xor, self.marco_esfera):
+        for marco in (self.marco_nubes, self.marco_xor):
             marco.pack_forget()
-        {"nubes": self.marco_nubes, "xor": self.marco_xor, "esfera": self.marco_esfera}[tipo].pack(
+        {"nubes": self.marco_nubes, "xor": self.marco_xor}[tipo].pack(
             fill="x", pady=(2, 0))
         self.sp_clases.configure(state="normal" if tipo == "nubes" else "disabled")
         if tipo != "nubes":
@@ -710,7 +698,7 @@ class Aplicacion:
 
     def _escenario(self, nombre):
         """Carga un escenario de 3 entradas. Las nubes cargan sus 3 clases; para
-        XOR y esfera la tabla de nubes también se ajusta a 3 entradas, para que
+        el XOR la tabla de nubes también se ajusta a 3 entradas, para que
         al volver a 'Nubes' no queden medias con otro número de coordenadas."""
         e = ESCENARIOS[nombre]
         self.v_tipo.set(e["tipo"])
@@ -779,14 +767,6 @@ class Aplicacion:
             if esquinas > 2 * cfg["n_por_clase"]:
                 raise ValueError("El XOR con %d entradas tiene %d esquinas: use al menos %d puntos por clase."
                                  % (n, esquinas, esquinas // 2))
-        else:
-            cfg["n_clases"] = 2
-            cfg["esfera_centro"] = leer_float(self.v_esf_centro, "Centro de la esfera")
-            cfg["esfera_radio_interno"] = leer_positivo(self.v_esf_r1, "Radio de la esfera")
-            cfg["esfera_radio_externo"] = leer_positivo(self.v_esf_r2, "Radio externo")
-            if cfg["esfera_radio_externo"] <= 1.3 * cfg["esfera_radio_interno"]:
-                raise ValueError("El radio externo debe ser mayor que 1,3 veces el radio de la esfera\n"
-                                 "(entre las dos clases se deja un espacio vacío).")
         cfg["ocultas"] = leer_ocultas(self.v_ocultas.get())
         cfg["tasa"] = leer_positivo(self.v_tasa, "Tasa de aprendizaje")
         cfg["ajuste"] = "patron" if self.v_ajuste.get() == TEXTO_AJUSTE["patron"] else "epoca"
@@ -1327,9 +1307,6 @@ class Aplicacion:
         self.v_xor_desv.set(fmt(cfg["xor_desviacion"]))
         self.v_xor_lado.set(fmt(cfg["xor_lado"]))
         self.v_xor_dist.set(cfg["distribucion_xor"])
-        self.v_esf_centro.set(fmt(cfg["esfera_centro"]))
-        self.v_esf_r1.set(fmt(cfg["esfera_radio_interno"]))
-        self.v_esf_r2.set(fmt(cfg["esfera_radio_externo"]))
         self.v_ocultas.set("; ".join(str(n) for n in cfg["ocultas"]))
         self.v_tasa.set(fmt(cfg["tasa"]))
         self.v_ajuste.set(TEXTO_AJUSTE[cfg["ajuste"]])

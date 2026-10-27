@@ -9,7 +9,7 @@ para que la interfaz (main.py) los muestre.
 import copy
 
 from aleatorio import (GeneradorAleatorio, generar_nubes, generar_xor,
-                       generar_esfera, centros_automaticos, generar_datos_regresion)
+                       centros_automaticos, generar_datos_regresion)
 from red_neuronal import RedNeuronal, num
 from formulas import (normalizar, desnormalizar, exactitud, exactitud_por_clase, media,
                       desviacion_estandar, minimo, maximo, clase_de_la_salida,
@@ -23,7 +23,7 @@ CONFIG = {
     "n_entradas": 3,
     "n_clases": 3,
     "n_por_clase": 100,           # mismo número de puntos en todas las clases
-    "tipo_datos": "nubes",        # "nubes", "xor" o "esfera"
+    "tipo_datos": "nubes",        # "nubes" o "xor"
     "clases": [
         {"centro": [2.0, 2.0, 2.0], "desviacion": 1.0, "distribucion": "normal"},
         {"centro": [8.0, 2.0, 5.0], "desviacion": 1.0, "distribucion": "normal"},
@@ -31,9 +31,6 @@ CONFIG = {
     ],
     "xor_desviacion": 0.7,        # nubes de las esquinas del XOR
     "xor_lado": 6.0,
-    "esfera_centro": 5.0,
-    "esfera_radio_interno": 2.0,
-    "esfera_radio_externo": 5.0,
     "distribucion_xor": "normal",
     # --- red ---
     "ocultas": [5],               # neuronas de cada capa oculta
@@ -127,11 +124,6 @@ def generar_datos(config, gen):
         X, etiquetas = generar_xor(gen, config["n_por_clase"], n, config["xor_desviacion"],
                                    config["distribucion_xor"], config["xor_lado"])
         return X, etiquetas, 2
-    if tipo == "esfera":
-        X, etiquetas = generar_esfera(gen, config["n_por_clase"], n, config["esfera_centro"],
-                                      config["esfera_radio_interno"],
-                                      config["esfera_radio_externo"])
-        return X, etiquetas, 2
     clases = config["clases"][:config["n_clases"]]
     X, etiquetas = generar_nubes(gen, config["n_por_clase"], clases)
     return X, etiquetas, config["n_clases"]
@@ -170,7 +162,7 @@ def ejecutar(config, progreso=None):
             "desviacion": media([desviacion_estandar([q[j] for q in pts]) for j in range(n)]),  # F23
             "exactitud": exactitud_por_clase(predicciones, etiquetas, k)})       # F13
 
-    titulos = {"nubes": "Nubes", "xor": "XOR en %d dimensiones" % n, "esfera": "Esfera y cáscara"}
+    titulos = {"nubes": "Nubes", "xor": "XOR en %d dimensiones" % n}
     return {"tipo": "clasificacion", "X": X, "etiquetas": etiquetas, "n_clases": n_clases,
             "nombres": nombres_clases(n_clases), "red": red, "mins": mins, "maxs": maxs,
             "punto": None, "registro": registro, "estadisticas": estadisticas,

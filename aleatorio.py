@@ -125,31 +125,6 @@ def generar_xor(generador, n_por_clase, n_entradas, desviacion, distribucion, la
     return X, etiquetas
 
 
-def generar_esfera(generador, n_por_clase, n_entradas, centro, radio_interno, radio_externo):
-    """Esfera dentro de una cáscara (2 clases), en n dimensiones.
-    Clase 1: puntos a distancia < radio_interno del centro.
-    Clase 2: puntos a distancia entre 1,3*radio_interno y radio_externo.
-    Se toma una dirección al azar (n normales estándar divididas por su
-    norma) y un radio uniforme en el intervalo de la clase. La frontera es una
-    superficie curva cerrada: un solo plano no la puede separar."""
-    X, etiquetas = [], []
-    limites = [(0.0, radio_interno), (1.3 * radio_interno, radio_externo)]
-    for k in range(2):
-        r_min, r_max = limites[k]
-        for _ in range(n_por_clase):
-            direccion = [generador.normal(0.0, 1.0) for _ in range(n_entradas)]
-            suma = 0.0
-            for v in direccion:
-                suma = suma + v * v
-            norma = raiz_cuadrada(suma)
-            if norma == 0:
-                norma = 1.0
-            r = generador.uniforme(r_min, r_max)
-            X.append([centro + r * v / norma for v in direccion])
-            etiquetas.append(k)
-    return X, etiquetas
-
-
 def centros_automaticos(n_clases, n_entradas, semilla=12345, separacion=6.0):
     """Centros repartidos para n clases y n entradas: cada coordenada al azar en
     [0, 10], repitiendo hasta que cada centro quede a más de 'separacion' de los
